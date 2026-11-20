@@ -11,8 +11,8 @@ generation:
   retry_backoff_seconds: 0.5
   timeout_seconds: 60
 prices:
-  input_per_million: 0.0
-  output_per_million: 0.0
+  input_per_token: 0.0
+  output_per_token: 0.0
 scorers:
   exact_match: true
   contains_text: true

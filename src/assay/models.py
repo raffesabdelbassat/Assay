@@ -29,10 +29,10 @@ class GenerationSettings(BaseModel):
 
 
 class PriceSettings(BaseModel):
-    """USD per million tokens, captured into each run."""
+    """USD per token, captured into each run."""
 
-    input_per_million: float = Field(default=0.0, ge=0.0)
-    output_per_million: float = Field(default=0.0, ge=0.0)
+    input_per_token: float = Field(default=0.0, ge=0.0)
+    output_per_token: float = Field(default=0.0, ge=0.0)
 
 
 class ScorerSettings(BaseModel):

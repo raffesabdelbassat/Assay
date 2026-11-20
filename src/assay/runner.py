@@ -64,8 +64,8 @@ async def run_evaluation(examples: list[DatasetExample], config: AssayConfig, pr
         latency_ms = (time.perf_counter() - start) * 1000
         cost = 0.0
         if response is not None and cached is None:
-            cost = (response.input_tokens * config.prices.input_per_million +
-                    response.output_tokens * config.prices.output_per_million) / 1_000_000
+            cost = (response.input_tokens * config.prices.input_per_token +
+                    response.output_tokens * config.prices.output_per_token)
             if not no_cache:
                 db.put_cached(key, provider=config.provider, model=config.model, system_prompt=config.system_prompt,
                               prompt=prompt, temperature=config.generation.temperature,

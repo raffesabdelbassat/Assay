@@ -28,8 +28,8 @@ class Storage:
             finished_at TEXT,
             status TEXT NOT NULL,
             config_json TEXT NOT NULL,
-            input_price_per_million REAL NOT NULL,
-            output_price_per_million REAL NOT NULL,
+            input_price_per_token REAL NOT NULL,
+            output_price_per_token REAL NOT NULL,
             error TEXT
         );
         CREATE TABLE IF NOT EXISTS examples (
@@ -81,12 +81,21 @@ class Storage:
         CREATE INDEX IF NOT EXISTS idx_examples_run ON examples(run_id);
         CREATE INDEX IF NOT EXISTS idx_scores_response ON scores(response_id);
         """)
+        columns = {row["name"] for row in self.connection.execute("PRAGMA table_info(runs)")}
+        if "input_price_per_token" not in columns:
+            self.connection.execute("ALTER TABLE runs ADD COLUMN input_price_per_token REAL NOT NULL DEFAULT 0")
+            if "input_price_per_million" in columns:
+                self.connection.execute("UPDATE runs SET input_price_per_token=input_price_per_million / 1000000.0")
+        if "output_price_per_token" not in columns:
+            self.connection.execute("ALTER TABLE runs ADD COLUMN output_price_per_token REAL NOT NULL DEFAULT 0")
+            if "output_price_per_million" in columns:
+                self.connection.execute("UPDATE runs SET output_price_per_token=output_price_per_million / 1000000.0")
         self.connection.commit()
 
     def start_run(self, config: AssayConfig, started_at: str) -> int:
         cursor = self.connection.execute(
-            "INSERT INTO runs(started_at,status,config_json,input_price_per_million,output_price_per_million) VALUES(?,?,?,?,?)",
-            (started_at, "running", config.model_dump_json(), config.prices.input_per_million, config.prices.output_per_million),
+            "INSERT INTO runs(started_at,status,config_json,input_price_per_token,output_price_per_token) VALUES(?,?,?,?,?)",
+            (started_at, "running", config.model_dump_json(), config.prices.input_per_token, config.prices.output_per_token),
         )
         self.connection.commit()
         return int(cursor.lastrowid)

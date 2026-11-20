@@ -11,7 +11,7 @@ python -m venv .venv
 pip install -e ".[dev]"
 ```
 
-Set `ANTHROPIC_API_KEY` in your environment, then copy `config.example.yaml` to `config.yaml` and set token prices if you want cost estimates. The default model is `claude-haiku-5-5` and is configurable.
+Set `ANTHROPIC_API_KEY` in your environment, then copy `config.example.yaml` to `config.yaml` and set `prices.input_per_token` and `prices.output_per_token` if you want cost estimates. The default model is `claude-haiku-5-5` and is configurable.
 
 ## Run
 

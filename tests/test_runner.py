@@ -18,7 +18,7 @@ class FakeProvider:
 @pytest.mark.asyncio
 async def test_runner_persists_results_and_uses_cache(tmp_path) -> None:
     config = AssayConfig(database=str(tmp_path / "assay.sqlite3"), prompt_template="{input}",
-                         system_prompt="sys", prices={"input_per_million": 1, "output_per_million": 2})
+                         system_prompt="sys", prices={"input_per_token": 0.01, "output_per_token": 0.02})
     examples = [DatasetExample(id="answer", input="What is the answer?", expected="42")]
     storage = Storage(config.database)
     first_id, first = await run_evaluation(examples, config, FakeProvider(), storage=storage)
