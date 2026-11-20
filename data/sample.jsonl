@@ -1,0 +1,10 @@
+{"id":"capital-france","input":"What is the capital of France? Answer with the city only.","expected":"Paris"}
+{"id":"capital-japan","input":"What is the capital of Japan? Answer with the city only.","expected":"Tokyo"}
+{"id":"capital-kenya","input":"What is the capital of Kenya? Answer with the city only.","expected":"Nairobi"}
+{"id":"arithmetic-add","input":"What is 17 + 25? Answer with the number only.","expected":"42"}
+{"id":"arithmetic-multiply","input":"What is 9 times 8? Answer with the number only.","expected":"72"}
+{"id":"planet-red","input":"Which planet is known as the Red Planet? Answer with the planet only.","expected":"Mars"}
+{"id":"water-formula","input":"What is the chemical formula for water? Answer with the formula only.","expected":"H2O"}
+{"id":"json-colors","input":"Return valid JSON with a key \"colors\" containing an array with red and blue.","expected":"{\"colors\":[\"red\",\"blue\"]}"}
+{"id":"weekday","input":"How many days are in a week? Answer with the number only.","expected":"7"}
+{"id":"regex-email","input":"Give one example email address only.","expected":"person@example.com"}
