@@ -268,3 +268,16 @@ async def test_simple_pass_skips_configured_fallback_judge(tmp_path) -> None:
     assert summary["average_judge_score"] is None
     assert storage.connection.execute("SELECT COUNT(*) FROM scores WHERE scorer='llm_judge'").fetchone()[0] == 0
     storage.close()
+
+
+@pytest.mark.asyncio
+async def test_judge_can_require_a_different_provider(tmp_path) -> None:
+    config = AssayConfig(
+        provider="anthropic",
+        model="candidate",
+        database=str(tmp_path / "same-family.sqlite3"),
+        judge={"provider": "anthropic", "model": "judge", "rubric": "Accuracy.",
+               "require_different_provider": True},
+    )
+    with pytest.raises(ValueError, match="must differ from the candidate provider"):
+        await run_evaluation([], config, FakeProvider(), judge_provider=FakeProvider())

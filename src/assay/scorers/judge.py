@@ -8,7 +8,7 @@ import time
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from assay.models import JudgeSettings, ScoreResult
+from assay.models import JudgeSettings, ProviderResponse, ScoreResult
 from assay.providers.base import Provider
 from assay.scorers.base import Scorer
 
@@ -69,11 +69,31 @@ class JudgeScorer(Scorer):
             f"Evaluation data: {payload}"
         )
         started = time.perf_counter()
-        last_error: Exception | None = None
+        responses = [await self._generate(prompt) for _ in range(self.settings.repeats)]
+        verdicts = [_parse_verdict(response.output) for response in responses]
+        average_score = sum(verdict.score for verdict in verdicts) / len(verdicts)
+        input_tokens = sum(response.input_tokens for response in responses)
+        output_tokens = sum(response.output_tokens for response in responses)
+        cost = input_tokens * self.settings.prices.input_per_token + output_tokens * self.settings.prices.output_per_token
+        reasons = [verdict.reason for verdict in verdicts]
+        return ScoreResult(
+            scorer=self.name,
+            passed=average_score >= self.settings.pass_threshold,
+            score=average_score,
+            details={"reason": reasons[0] if len(reasons) == 1 else reasons, "repeats": len(responses)},
+            provider=self.settings.provider,
+            model=self.settings.model,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            cost=cost,
+            latency_ms=(time.perf_counter() - started) * 1000,
+        )
+
+    async def _generate(self, prompt: str) -> ProviderResponse:
         for attempt in range(self.settings.retries + 1):
             try:
                 async with self._semaphore:
-                    response = await asyncio.wait_for(
+                    return await asyncio.wait_for(
                         self.provider.generate(
                             model=self.settings.model,
                             system_prompt="You are a careful evaluator. Follow the rubric and return valid JSON only.",
@@ -83,30 +103,9 @@ class JudgeScorer(Scorer):
                         ),
                         timeout=self.settings.timeout_seconds,
                     )
-                last_error = None
-                break
             except Exception as exc:
-                last_error = exc
                 if not _is_retryable(exc) or attempt >= self.settings.retries:
                     raise
                 await asyncio.sleep(self.settings.retry_backoff_seconds * (2 ** attempt))
-        if last_error is not None:
-            raise last_error
-        verdict = _parse_verdict(response.output)
-        cost = (
-            response.input_tokens * self.settings.prices.input_per_token
-            + response.output_tokens * self.settings.prices.output_per_token
-        )
-        return ScoreResult(
-            scorer=self.name,
-            passed=verdict.score >= self.settings.pass_threshold,
-            score=verdict.score,
-            details={"reason": verdict.reason},
-            provider=self.settings.provider,
-            model=self.settings.model,
-            input_tokens=response.input_tokens,
-            output_tokens=response.output_tokens,
-            cost=cost,
-            latency_ms=(time.perf_counter() - started) * 1000,
-        )
+        raise RuntimeError("Judge retries exhausted without a response")
 

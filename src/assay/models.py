@@ -51,6 +51,9 @@ class JudgeSettings(BaseModel):
     rubric: str | None = Field(default=None, min_length=1)
     rubric_file: str | None = None
     when: Literal["always", "simple_failure", "missing_expected"] = "always"
+    repeats: int = Field(default=1, ge=1, le=5)
+    randomize_pair_order: bool = True
+    require_different_provider: bool = False
     pass_threshold: float = Field(default=0.7, ge=0.0, le=1.0)
     temperature: float = Field(default=1.0, ge=0.0, le=1.0)
     max_tokens: int = Field(default=512, gt=0)

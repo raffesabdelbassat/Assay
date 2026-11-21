@@ -46,6 +46,9 @@ async def run_evaluation(examples: list[DatasetExample], config: AssayConfig, pr
     """Run dataset items with a concurrency cap and persist the results."""
     if config.judge is not None and judge_provider is None:
         raise ValueError("A judge_provider is required when judge settings are configured")
+    if (config.judge is not None and config.judge.require_different_provider
+            and config.provider == config.judge.provider):
+        raise ValueError("Judge provider must differ from the candidate provider")
     db = storage or Storage(config.database)
     run_id = db.start_run(config, _now())
     example_rows = [(example, db.add_example(run_id, example)) for example in examples]

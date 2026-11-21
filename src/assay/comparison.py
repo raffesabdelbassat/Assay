@@ -71,6 +71,10 @@ async def run_comparison(
         judge_key = f"{config.judge.provider}:{config.judge.model}"
         if judge_key not in prices.models:
             missing_prices.append(judge_key)
+        if config.judge.require_different_provider:
+            same_provider = sorted({target.provider for target in config.models if target.provider == config.judge.provider})
+            if same_provider:
+                raise ValueError(f"Judge provider must differ from candidate providers: {', '.join(same_provider)}")
     if missing_prices:
         raise ValueError(f"Missing price entries for: {', '.join(missing_prices)}")
     provider_names = {target.provider for target in config.models}

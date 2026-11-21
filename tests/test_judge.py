@@ -54,3 +54,28 @@ async def test_judge_rejects_malformed_verdict_json() -> None:
     )
     with pytest.raises(ValueError, match="invalid JSON verdict"):
         await scorer.score_example("question", "answer", None)
+
+
+@pytest.mark.asyncio
+async def test_judge_repeats_and_averages_scores() -> None:
+    class RepeatingProvider(FakeJudgeProvider):
+        def __init__(self) -> None:
+            super().__init__()
+            self.calls = 0
+
+        async def generate(self, **kwargs) -> ProviderResponse:
+            self.calls += 1
+            score = 0.4 if self.calls == 1 else 0.8
+            return ProviderResponse(output=json.dumps({"score": score, "reason": f"pass {self.calls}"}),
+                                    input_tokens=10, output_tokens=2)
+
+    provider = RepeatingProvider()
+    scorer = JudgeScorer(
+        JudgeSettings(provider="openai", model="judge", rubric="Accuracy.", repeats=2, pass_threshold=0.6),
+        provider,
+    )
+    result = await scorer.score_example("question", "answer", None)
+    assert provider.calls == 2
+    assert result.score == pytest.approx(0.6)
+    assert result.passed is True
+    assert result.details["repeats"] == 2
