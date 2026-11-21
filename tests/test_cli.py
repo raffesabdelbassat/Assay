@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 from typer.testing import CliRunner
@@ -98,5 +99,5 @@ def test_run_cli_supports_fake_judge_without_live_api(tmp_path: Path, monkeypatc
     import sqlite3
     connection = sqlite3.connect(database)
     score = connection.execute("SELECT details_json FROM scores WHERE scorer='llm_judge'").fetchone()
-    assert score[0] == '{"reason": "Accurate and concise."}'
+    assert json.loads(score[0]) == {"reason": "Accurate and concise.", "repeats": 1}
     connection.close()
