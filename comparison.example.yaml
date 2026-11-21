@@ -1,0 +1,46 @@
+models:
+  - provider: anthropic
+    model: claude-haiku-5-5
+  - provider: openai
+    model: gpt-5.5
+  - provider: google
+    model: gemini-3.8-flash
+
+prompts:
+  v1:
+    system_prompt: "Answer clearly and concisely. Follow requested formats exactly."
+    prompt_template: "{input}"
+  v2:
+    system_prompt: "You are a precise assistant. Return only the answer requested."
+    prompt_template: |-
+      Answer this question in one concise sentence: {input}
+
+generation:
+  temperature: 1.0
+  max_tokens: 256
+  concurrency: 5
+  retries: 3
+  retry_backoff_seconds: 0.5
+  timeout_seconds: 60
+
+provider_limits:
+  anthropic:
+    concurrency: 3
+    requests_per_minute: 60
+  openai:
+    concurrency: 3
+    requests_per_minute: 60
+  google:
+    concurrency: 3
+    requests_per_minute: 60
+
+scorers:
+  exact_match: true
+  contains_text: true
+  regex_match: true
+  valid_json: true
+  case_sensitive: false
+  strip_whitespace: true
+
+prices_file: prices.example.yaml
+database: assay.sqlite3
