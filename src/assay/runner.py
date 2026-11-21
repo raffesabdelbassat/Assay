@@ -37,7 +37,7 @@ async def run_evaluation(examples: list[DatasetExample], config: AssayConfig, pr
     semaphore = asyncio.Semaphore(config.generation.concurrency)
     scorers = build_scorers(config.scorers)
 
-    async def process(example: DatasetExample, example_db_id: int) -> None:
+    async def process(example: DatasetExample, example_db_id: int) -> bool:
         prompt = config.prompt_template.format(input=example.input, expected=example.expected or "", id=example.id)
         key = cache_key(config, prompt)
         start = time.perf_counter()
@@ -75,10 +75,12 @@ async def run_evaluation(examples: list[DatasetExample], config: AssayConfig, pr
                                       latency_ms=latency_ms, attempts=attempts, cache_hit=cached is not None, error=error)
         if response is not None:
             db.add_scores(response_id, [scorer.score(response.output, example.expected) for scorer in scorers])
+        return response is None
 
     try:
-        await asyncio.gather(*(process(example, db_id) for example, db_id in example_rows))
-        db.finish_run(run_id, _now())
+        failures = await asyncio.gather(*(process(example, db_id) for example, db_id in example_rows))
+        status = "completed_with_errors" if any(failures) else "completed"
+        db.finish_run(run_id, _now(), status=status)
     except Exception as exc:
         db.finish_run(run_id, _now(), status="failed", error=f"{type(exc).__name__}: {exc}")
         raise

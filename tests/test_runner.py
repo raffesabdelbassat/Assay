@@ -93,4 +93,6 @@ async def test_failed_model_call_counts_as_incorrect_in_accuracy(tmp_path) -> No
         storage=storage,
     )
     assert summary["accuracy"] == 0
+    status = storage.connection.execute("SELECT status FROM runs ORDER BY id DESC LIMIT 1").fetchone()["status"]
+    assert status == "completed_with_errors"
     storage.close()
