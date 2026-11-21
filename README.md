@@ -19,17 +19,30 @@ Provider SDKs are optional extras. Set `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or
 assay run data/sample.jsonl --config config.yaml
 assay run data/sample.jsonl --config config.yaml --no-cache
 assay compare data/sample.jsonl --config comparison.example.yaml
+assay compare data/sample.jsonl --config comparison.example.yaml --pairwise
 ```
 
 The comparison config runs every configured model against every named prompt version. Its `provider_limits` section can cap concurrent requests and requests per minute for each provider. The separate prices file uses `provider:model` keys and USD per token rates. Every comparison target must have an explicit price entry; use zero rates only when the model has no metered provider cost. Review and refresh `prices.example.yaml` before relying on cost rankings. The included cloud rates were checked on 2026-11-21: [Anthropic](https://www.anthropic.com/claude-haiku-5-5), [OpenAI](https://developers.openai.com/api/docs/models/gpt-5.5), and [Google](https://ai.google.dev/gemini-api/docs/pricing).
 
 The report shows each provider/model/prompt combination with accuracy, average latency, and total cost, then names the most accurate, fastest, and cheapest configuration.
 
+Add `pairwise: true` to a comparison config or use `--pairwise` to ask the configured judge which answer is better for each example and prompt version. The judge randomizes answer order by default, and report rows include wins, losses, ties, and the judge cost share. Pairwise mode needs at least two candidate models and a judge price entry.
+
 ## AI judge scorer
 
 Add a `judge` section to a single-run config (see `judge.example.yaml`) to grade open-ended answers. Configure a separate provider/model, rubric, pass threshold, generation limits, and that judge model's per-token prices. The judge receives only the question, candidate answer, and rubric; it does not receive the dataset's `expected` answer. Its JSON `score` and `reason` are stored with the response. When enabled, summary accuracy is the fraction of judge scores at or above `pass_threshold`, and the CLI also prints the average numeric judge score. Judge tokens, latency, and cost are included in run totals.
 
 Use `assay run data/sample.jsonl --config judge.example.yaml` after setting both `ANTHROPIC_API_KEY` and `OPENAI_API_KEY`. This command makes real API calls; tests use fake providers instead.
+
+To check a judge against human grades, export 30–50 blind answers from a completed judged run, fill in each `human_score` from 0 to 1, then calculate threshold-based pass/fail agreement and mean absolute score error:
+
+```bash
+assay audit export --run-id 12 --output audit.jsonl --database assay.sqlite3 --limit 40
+# Fill each human_score in audit.jsonl without looking at the judge score.
+assay audit agreement --run-id 12 --labels audit.jsonl --database assay.sqlite3
+```
+
+The agreement command uses the run's configured pass threshold for both human and judge labels. It requires 30–50 completed labels and reports agreement percentage and score error.
 
 Each dataset line needs an `id` and an `input`; `expected` is optional. `id` is saved as `example_key` and supports comparing the same example across runs. Built-in scorers are `exact_match`, `contains_text`, `regex_match`, and `valid_json`. Regex uses the configured `regex_pattern` when present, otherwise it treats `expected` as the pattern. Scorers requiring an expected value return a failed score when it is absent.
 
