@@ -131,6 +131,8 @@ class AssayConfig(BaseModel):
     generation: GenerationSettings = Field(default_factory=GenerationSettings)
     prices: PriceSettings = Field(default_factory=PriceSettings)
     scorers: ScorerSettings = Field(default_factory=ScorerSettings)
+    prompt_version: str | None = None
+    comparison_id: str | None = None
     database: str = "assay.sqlite3"
 
     @field_validator("prompt_template")

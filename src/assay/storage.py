@@ -30,6 +30,8 @@ class Storage:
             config_json TEXT NOT NULL,
             input_price_per_token REAL NOT NULL,
             output_price_per_token REAL NOT NULL,
+            comparison_id TEXT,
+            prompt_version TEXT,
             error TEXT
         );
         CREATE TABLE IF NOT EXISTS examples (
@@ -90,12 +92,17 @@ class Storage:
             self.connection.execute("ALTER TABLE runs ADD COLUMN output_price_per_token REAL NOT NULL DEFAULT 0")
             if "output_price_per_million" in columns:
                 self.connection.execute("UPDATE runs SET output_price_per_token=output_price_per_million / 1000000.0")
+        if "comparison_id" not in columns:
+            self.connection.execute("ALTER TABLE runs ADD COLUMN comparison_id TEXT")
+        if "prompt_version" not in columns:
+            self.connection.execute("ALTER TABLE runs ADD COLUMN prompt_version TEXT")
         self.connection.commit()
 
     def start_run(self, config: AssayConfig, started_at: str) -> int:
         cursor = self.connection.execute(
-            "INSERT INTO runs(started_at,status,config_json,input_price_per_token,output_price_per_token) VALUES(?,?,?,?,?)",
-            (started_at, "running", config.model_dump_json(), config.prices.input_per_token, config.prices.output_per_token),
+            "INSERT INTO runs(started_at,status,config_json,input_price_per_token,output_price_per_token,comparison_id,prompt_version) VALUES(?,?,?,?,?,?,?)",
+            (started_at, "running", config.model_dump_json(), config.prices.input_per_token, config.prices.output_per_token,
+             config.comparison_id, config.prompt_version),
         )
         self.connection.commit()
         return int(cursor.lastrowid)
