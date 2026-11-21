@@ -1,3 +1,4 @@
+import asyncio
 import json
 
 import pytest
@@ -95,4 +96,36 @@ async def test_failed_model_call_counts_as_incorrect_in_accuracy(tmp_path) -> No
     assert summary["accuracy"] == 0
     status = storage.connection.execute("SELECT status FROM runs ORDER BY id DESC LIMIT 1").fetchone()["status"]
     assert status == "completed_with_errors"
+    storage.close()
+
+
+@pytest.mark.asyncio
+async def test_runner_respects_configured_concurrency_limit(tmp_path) -> None:
+    active_calls = 0
+    max_active_calls = 0
+
+    class SlowProvider:
+        async def generate(self, *, model: str, system_prompt: str, prompt: str,
+                           temperature: float, max_tokens: int) -> ProviderResponse:
+            nonlocal active_calls, max_active_calls
+            active_calls += 1
+            max_active_calls = max(max_active_calls, active_calls)
+            await asyncio.sleep(0.02)
+            active_calls -= 1
+            return ProviderResponse(output="done")
+
+    config = AssayConfig(
+        database=str(tmp_path / "concurrency.sqlite3"),
+        generation={"concurrency": 2, "retries": 0},
+        scorers={"exact_match": False, "contains_text": False, "regex_match": False, "valid_json": False},
+    )
+    storage = Storage(config.database)
+    await run_evaluation(
+        [DatasetExample(id=str(index), input=f"question {index}") for index in range(6)],
+        config,
+        SlowProvider(),
+        no_cache=True,
+        storage=storage,
+    )
+    assert max_active_calls == 2
     storage.close()
