@@ -72,6 +72,24 @@ async def test_comparison_requires_explicit_prices_for_every_model(tmp_path) -> 
 
 
 @pytest.mark.asyncio
+async def test_provider_setup_failure_does_not_create_database(tmp_path) -> None:
+    database = tmp_path / "provider-failure.sqlite3"
+    config = ComparisonConfig.model_validate({
+        "models": [{"provider": "openai", "model": "gpt"}],
+        "prompts": {"v1": {"prompt_template": "{input}"}},
+        "database": str(database),
+    })
+    prices = PriceCatalog(models={"openai:gpt": {"input_per_token": 0, "output_per_token": 0}})
+
+    def fail_setup(provider: str, timeout: float) -> FakeProvider:
+        raise RuntimeError("optional SDK missing")
+
+    with pytest.raises(RuntimeError, match="optional SDK missing"):
+        await run_comparison([DatasetExample(id="one", input="q")], config, prices, fail_setup)
+    assert not database.exists()
+
+
+@pytest.mark.asyncio
 async def test_provider_rate_limit_is_shared_across_models(tmp_path) -> None:
     request_times: list[float] = []
 

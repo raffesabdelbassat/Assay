@@ -61,7 +61,6 @@ async def run_comparison(
     storage: Storage | None = None,
 ) -> tuple[str, list[dict[str, Any]]]:
     """Run every configured model against every named prompt version."""
-    db = storage or Storage(config.database)
     comparison_id = str(uuid4())
     missing_prices = [
         f"{target.provider}:{target.model}"
@@ -69,8 +68,6 @@ async def run_comparison(
         if f"{target.provider}:{target.model}" not in prices.models
     ]
     if missing_prices:
-        if storage is None:
-            db.close()
         raise ValueError(f"Missing price entries for: {', '.join(missing_prices)}")
     limits = {
         provider_name: config.provider_limits.get(provider_name, ProviderLimit())
@@ -80,6 +77,8 @@ async def run_comparison(
     for provider_name, provider_limit in limits.items():
         raw_provider = provider_factory(provider_name, config.generation.timeout_seconds)
         providers[provider_name] = LimitedProvider(raw_provider, provider_limit)
+
+    db = storage or Storage(config.database)
 
     tasks = []
     for target in config.models:
