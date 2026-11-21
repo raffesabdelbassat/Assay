@@ -22,6 +22,8 @@ class DatasetExample(BaseModel):
 class GenerationSettings(BaseModel):
     """Sampling and concurrency settings for a model call."""
 
+    model_config = ConfigDict(extra="forbid")
+
     temperature: float = Field(default=0.0, ge=0.0, le=1.0)
     max_tokens: int = Field(default=512, gt=0)
     concurrency: int = Field(default=5, gt=0)
@@ -33,12 +35,16 @@ class GenerationSettings(BaseModel):
 class PriceSettings(BaseModel):
     """USD per token, captured into each run."""
 
+    model_config = ConfigDict(extra="forbid")
+
     input_per_token: float = Field(default=0.0, ge=0.0)
     output_per_token: float = Field(default=0.0, ge=0.0)
 
 
 class ScorerSettings(BaseModel):
     """Configuration for the built-in scorer plugin names."""
+
+    model_config = ConfigDict(extra="forbid")
 
     exact_match: bool = True
     contains_text: bool = True
@@ -61,6 +67,8 @@ class ScorerSettings(BaseModel):
 
 class AssayConfig(BaseModel):
     """Complete run configuration loaded from YAML."""
+
+    model_config = ConfigDict(extra="forbid")
 
     provider: str = "anthropic"
     model: str = "claude-haiku-5-5"
