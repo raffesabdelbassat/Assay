@@ -68,3 +68,35 @@ def test_compare_cli_runs_three_fake_providers(tmp_path: Path, monkeypatch) -> N
     assert "anthropic" in result.stdout and "openai" in result.stdout and "ollama" in result.stdout
     assert "Best accuracy:" in result.stdout and "Fastest:" in result.stdout and "Cheapest:" in result.stdout
     assert database.exists()
+
+
+def test_run_cli_supports_fake_judge_without_live_api(tmp_path: Path, monkeypatch) -> None:
+    dataset = tmp_path / "questions.jsonl"
+    dataset.write_text('{"id":"summary","input":"Summarize this.","expected":"gold"}\n', encoding="utf-8")
+    database = tmp_path / "judge.sqlite3"
+    config = tmp_path / "judge.yaml"
+    config.write_text(
+        "provider: anthropic\nmodel: candidate\n"
+        f"database: '{database.as_posix()}'\n"
+        "judge:\n  provider: openai\n  model: judge-strong\n"
+        "  rubric: 'Reward accurate concise summaries.'\n"
+        "  prices:\n    input_per_token: 0.000001\n    output_per_token: 0.000002\n",
+        encoding="utf-8",
+    )
+
+    class FakeJudge:
+        async def generate(self, **kwargs) -> ProviderResponse:
+            return ProviderResponse(output='{"score":0.9,"reason":"Accurate and concise."}')
+
+    monkeypatch.setattr(cli, "create_provider", lambda settings: FakeProvider())
+    monkeypatch.setattr(cli, "create_comparison_provider", lambda name, timeout: FakeJudge())
+    result = CliRunner().invoke(cli.app, ["run", str(dataset), "--config", str(config)])
+
+    assert result.exit_code == 0, result.stdout
+    assert "Accuracy            100.0%" in result.stdout
+    assert "Judge average score 0.90" in result.stdout
+    import sqlite3
+    connection = sqlite3.connect(database)
+    score = connection.execute("SELECT details_json FROM scores WHERE scorer='llm_judge'").fetchone()
+    assert score[0] == '{"reason": "Accurate and concise."}'
+    connection.close()

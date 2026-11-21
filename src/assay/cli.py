@@ -37,12 +37,23 @@ def run(
     examples = load_dataset(dataset)
     try:
         provider = create_provider(settings)
-    except ValueError as exc:
+        judge_provider = None
+        if settings.judge is not None:
+            judge_provider = create_comparison_provider(
+                settings.judge.provider,
+                settings.judge.timeout_seconds,
+            )
+    except (ValueError, RuntimeError) as exc:
         raise typer.BadParameter(str(exc)) from exc
-    run_id, summary = asyncio.run(run_evaluation(examples, settings, provider, no_cache=no_cache))
+    run_id, summary = asyncio.run(run_evaluation(
+        examples, settings, provider, no_cache=no_cache, judge_provider=judge_provider,
+    ))
     typer.echo(f"Run {run_id}")
     typer.echo("Metric              Value")
     typer.echo(f"Accuracy            {summary['accuracy'] if summary['accuracy'] is not None else 0:.1%}")
+    if settings.judge is not None:
+        judge_score = summary.get("average_judge_score")
+        typer.echo(f"Judge average score {judge_score if judge_score is not None else 0:.2f}")
     typer.echo(f"Average latency     {summary['average_latency_ms'] or 0:.1f} ms")
     typer.echo(f"Total cost          ${summary['total_cost'] or 0:.6f}")
 

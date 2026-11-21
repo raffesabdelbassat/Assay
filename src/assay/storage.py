@@ -170,9 +170,12 @@ class Storage:
     def summary(self, run_id: int) -> dict[str, Any]:
         run = self.connection.execute("SELECT config_json FROM runs WHERE id=?", (run_id,)).fetchone()
         exact_match_enabled = True
+        judge_enabled = False
         if run is not None:
             config = json.loads(run["config_json"])
             exact_match_enabled = config.get("scorers", {}).get("exact_match", True)
+            judge_enabled = config.get("judge") is not None
+        primary_scorer = "llm_judge" if judge_enabled else "exact_match"
         row = self.connection.execute("""SELECT COUNT(DISTINCT e.id) AS examples,
             AVG(COALESCE(s.passed, 0)) AS accuracy,
             AVG(COALESCE(r.latency_ms, 0) + COALESCE((SELECT SUM(s2.latency_ms) FROM scores s2
@@ -181,10 +184,15 @@ class Storage:
                 JOIN responses r3 ON r3.id=s3.response_id JOIN examples e3 ON e3.id=r3.example_id
                 WHERE e3.run_id=?), 0) AS total_cost
             FROM examples e LEFT JOIN responses r ON r.example_id=e.id
-            LEFT JOIN scores s ON s.response_id=r.id AND s.scorer='exact_match' WHERE e.run_id=?""", (run_id, run_id)).fetchone()
+            LEFT JOIN scores s ON s.response_id=r.id AND s.scorer=? WHERE e.run_id=?""", (run_id, primary_scorer, run_id)).fetchone()
         result = dict(row)
-        if not exact_match_enabled:
+        if not exact_match_enabled and not judge_enabled:
             result["accuracy"] = None
+        result["average_judge_score"] = None
+        if judge_enabled:
+            result["average_judge_score"] = self.connection.execute("""SELECT AVG(s.score) FROM scores s
+                JOIN responses r ON r.id=s.response_id JOIN examples e ON e.id=r.example_id
+                WHERE e.run_id=? AND s.scorer='llm_judge'""", (run_id,)).fetchone()[0]
         return result
 
     def close(self) -> None:

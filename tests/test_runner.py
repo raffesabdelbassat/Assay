@@ -227,7 +227,7 @@ async def test_runner_persists_async_judge_score_reason_cost_and_latency(tmp_pat
         storage=storage,
     )
 
-    assert summary["accuracy"] is None
+    assert summary["accuracy"] == 1
     assert summary["total_cost"] == pytest.approx(0.01414)
     assert summary["average_latency_ms"] > 0
     row = storage.connection.execute("SELECT * FROM scores WHERE scorer='llm_judge'").fetchone()
