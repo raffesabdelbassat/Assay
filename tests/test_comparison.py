@@ -90,6 +90,40 @@ async def test_provider_setup_failure_does_not_create_database(tmp_path) -> None
 
 
 @pytest.mark.asyncio
+async def test_comparison_runs_and_prices_the_judge_model(tmp_path) -> None:
+    config = ComparisonConfig.model_validate({
+        "models": [{"provider": "anthropic", "model": "candidate"}],
+        "prompts": {"v1": {"prompt_template": "{input}"}},
+        "judge": {"provider": "openai", "model": "judge", "rubric": "Is it correct?"},
+        "database": str(tmp_path / "comparison-judge.sqlite3"),
+    })
+    prices = PriceCatalog(models={
+        "anthropic:candidate": {"input_per_token": 0.001, "output_per_token": 0.002},
+        "openai:judge": {"input_per_token": 0.000001, "output_per_token": 0.000002},
+    })
+
+    class CandidateAndJudge:
+        name = "fake"
+
+        async def generate(self, *, model: str, **kwargs) -> ProviderResponse:
+            if model == "judge":
+                return ProviderResponse(output='{"score":0.9,"reason":"Correct."}', input_tokens=100, output_tokens=20)
+            return ProviderResponse(output="answer", input_tokens=10, output_tokens=2)
+
+    storage = Storage(config.database)
+    _, results = await run_comparison(
+        [DatasetExample(id="one", input="question", expected="answer")], config, prices,
+        lambda provider, timeout: CandidateAndJudge(), storage=storage,
+    )
+    assert results[0]["accuracy"] == 1
+    assert results[0]["total_cost"] == pytest.approx(0.01414)
+    score = storage.connection.execute("SELECT model,details_json FROM scores WHERE scorer='llm_judge'").fetchone()
+    assert score["model"] == "judge"
+    assert "Correct." in score["details_json"]
+    storage.close()
+
+
+@pytest.mark.asyncio
 async def test_provider_rate_limit_is_shared_across_models(tmp_path) -> None:
     request_times: list[float] = []
 

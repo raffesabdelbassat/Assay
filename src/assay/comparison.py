@@ -67,12 +67,16 @@ async def run_comparison(
         for target in config.models
         if f"{target.provider}:{target.model}" not in prices.models
     ]
+    if config.judge is not None:
+        judge_key = f"{config.judge.provider}:{config.judge.model}"
+        if judge_key not in prices.models:
+            missing_prices.append(judge_key)
     if missing_prices:
         raise ValueError(f"Missing price entries for: {', '.join(missing_prices)}")
-    limits = {
-        provider_name: config.provider_limits.get(provider_name, ProviderLimit())
-        for provider_name in {target.provider for target in config.models}
-    }
+    provider_names = {target.provider for target in config.models}
+    if config.judge is not None:
+        provider_names.add(config.judge.provider)
+    limits = {name: config.provider_limits.get(name, ProviderLimit()) for name in provider_names}
     providers: dict[str, LimitedProvider] = {}
     for provider_name, provider_limit in limits.items():
         raw_provider = provider_factory(provider_name, config.generation.timeout_seconds)
@@ -92,12 +96,16 @@ async def run_comparison(
                 generation=config.generation.model_copy(update={"concurrency": limit.concurrency}),
                 prices=prices.models[f"{target.provider}:{target.model}"],
                 scorers=config.scorers,
+                judge=(config.judge.model_copy(update={
+                    "prices": prices.models[f"{config.judge.provider}:{config.judge.model}"],
+                }) if config.judge is not None else None),
                 prompt_version=version,
                 comparison_id=comparison_id,
                 database=config.database,
             )
             tasks.append((target, version, run_evaluation(
                 examples, run_config, providers[target.provider], no_cache=no_cache, storage=db,
+                judge_provider=providers[config.judge.provider] if config.judge is not None else None,
             )))
 
     try:
