@@ -33,3 +33,41 @@ async def test_runner_persists_results_and_uses_cache(tmp_path) -> None:
     config_json = storage.connection.execute("SELECT config_json FROM runs WHERE id=?", (first_id,)).fetchone()[0]
     assert json.loads(config_json)["system_prompt"] == "sys"
     storage.close()
+
+
+@pytest.mark.asyncio
+async def test_retry_wait_does_not_occupy_concurrency_slot(tmp_path) -> None:
+    call_order: list[str] = []
+    attempts = 0
+
+    class RetryProvider:
+        async def generate(self, *, model: str, system_prompt: str, prompt: str,
+                           temperature: float, max_tokens: int) -> ProviderResponse:
+            nonlocal attempts
+            call_order.append(prompt)
+            if prompt == "A" and attempts == 0:
+                attempts += 1
+                raise RuntimeError("temporary failure")
+            return ProviderResponse(output="ok")
+
+    config = AssayConfig(
+        database=str(tmp_path / "retry.sqlite3"),
+        prompt_template="{input}",
+        generation={"concurrency": 1, "retries": 1, "retry_backoff_seconds": 0.05},
+        scorers={"exact_match": False, "contains_text": False, "regex_match": False, "valid_json": False},
+    )
+    storage = Storage(config.database)
+    await run_evaluation(
+        [DatasetExample(id="a", input="A"), DatasetExample(id="b", input="B")],
+        config,
+        RetryProvider(),
+        no_cache=True,
+        storage=storage,
+    )
+
+    assert call_order == ["A", "B", "A"]
+    row = storage.connection.execute(
+        "SELECT attempts FROM responses r JOIN examples e ON e.id=r.example_id WHERE e.example_key='a'"
+    ).fetchone()
+    assert row["attempts"] == 2
+    storage.close()

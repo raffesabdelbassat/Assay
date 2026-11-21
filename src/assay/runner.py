@@ -46,21 +46,21 @@ async def run_evaluation(examples: list[DatasetExample], config: AssayConfig, pr
         error: str | None = None
         response: ProviderResponse | None = cached
         if cached is None:
-            async with semaphore:
-                for attempt in range(config.generation.retries + 1):
-                    attempts = attempt + 1
-                    try:
+            for attempt in range(config.generation.retries + 1):
+                attempts = attempt + 1
+                try:
+                    async with semaphore:
                         response = await asyncio.wait_for(provider.generate(
                             model=config.model, system_prompt=config.system_prompt, prompt=prompt,
                             temperature=config.generation.temperature, max_tokens=config.generation.max_tokens,
                         ), timeout=config.generation.timeout_seconds)
-                        break
-                    except Exception as exc:  # provider and timeout errors are retried uniformly
-                        error = f"{type(exc).__name__}: {exc}"
-                        if attempt < config.generation.retries:
-                            await asyncio.sleep(config.generation.retry_backoff_seconds * (2 ** attempt))
-                else:
-                    response = None
+                    break
+                except Exception as exc:  # provider and timeout errors are retried uniformly
+                    error = f"{type(exc).__name__}: {exc}"
+                    if attempt < config.generation.retries:
+                        await asyncio.sleep(config.generation.retry_backoff_seconds * (2 ** attempt))
+            else:
+                response = None
         latency_ms = (time.perf_counter() - start) * 1000
         cost = 0.0
         if response is not None and cached is None:
