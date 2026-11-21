@@ -65,6 +65,60 @@ class ScorerSettings(BaseModel):
         return value
 
 
+class ModelTarget(BaseModel):
+    """One provider/model pair in a comparison run."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    provider: str
+    model: str
+
+
+class PromptVersion(BaseModel):
+    """A named system and user prompt pair."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    system_prompt: str = "You are a helpful assistant."
+    prompt_template: str = "{input}"
+
+    @field_validator("prompt_template")
+    @classmethod
+    def validate_prompt_template(cls, value: str) -> str:
+        return AssayConfig.validate_prompt_template(value)
+
+
+class ProviderLimit(BaseModel):
+    """Per-provider in-flight and request-rate limits."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    concurrency: int = Field(default=5, gt=0)
+    requests_per_minute: int | None = Field(default=None, gt=0)
+
+
+class ComparisonConfig(BaseModel):
+    """Models and named prompts to cross-evaluate on one dataset."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    models: list[ModelTarget] = Field(min_length=1)
+    prompts: dict[str, PromptVersion] = Field(min_length=1)
+    generation: GenerationSettings = Field(default_factory=GenerationSettings)
+    provider_limits: dict[str, ProviderLimit] = Field(default_factory=dict)
+    scorers: ScorerSettings = Field(default_factory=ScorerSettings)
+    prices_file: str = "prices.yaml"
+    database: str = "assay.sqlite3"
+
+
+class PriceCatalog(BaseModel):
+    """Per-model token prices keyed as ``provider:model``."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    models: dict[str, PriceSettings]
+
+
 class AssayConfig(BaseModel):
     """Complete run configuration loaded from YAML."""
 
