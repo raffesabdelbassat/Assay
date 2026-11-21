@@ -141,6 +141,12 @@ class ComparisonConfig(BaseModel):
     prices_file: str = "prices.yaml"
     database: str = "assay.sqlite3"
 
+    @model_validator(mode="after")
+    def require_pairwise_candidates(self) -> "ComparisonConfig":
+        if self.pairwise and len(self.models) < 2:
+            raise ValueError("Pairwise mode requires at least two candidate models")
+        return self
+
 
 class PriceCatalog(BaseModel):
     """Per-model token prices keyed as ``provider:model``."""

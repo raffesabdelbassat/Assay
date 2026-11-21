@@ -66,6 +66,8 @@ async def run_comparison(
     """Run every configured model against every named prompt version."""
     comparison_id = str(uuid4())
     pairwise_enabled = config.pairwise if pairwise is None else pairwise
+    if pairwise_enabled and len(config.models) < 2:
+        raise ValueError("Pairwise mode requires at least two candidate models")
     if pairwise_enabled and config.judge is None:
         raise ValueError("Pairwise mode requires judge settings")
     missing_prices = [

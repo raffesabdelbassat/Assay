@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import random
 import sqlite3
 from pathlib import Path
 from typing import Any
@@ -237,13 +238,15 @@ class Storage:
         rows = self.connection.execute("SELECT * FROM pairwise_scores WHERE comparison_id=? ORDER BY id", (comparison_id,)).fetchall()
         return [dict(row) for row in rows]
 
-    def judge_audit_items(self, run_id: int, limit: int = 50) -> list[dict[str, Any]]:
-        """Return blindable question/answer pairs with judge scores for CLI export."""
+    def judge_audit_items(self, run_id: int, limit: int = 50, *, seed: int = 0) -> list[dict[str, Any]]:
+        """Return a reproducible random sample of blindable judged answers."""
         rows = self.connection.execute("""SELECT r.id AS response_id,e.input AS question,r.output AS answer
             FROM responses r JOIN examples e ON e.id=r.example_id
             JOIN scores s ON s.response_id=r.id AND s.scorer='llm_judge'
-            WHERE e.run_id=? AND r.output IS NOT NULL ORDER BY r.id LIMIT ?""", (run_id, limit)).fetchall()
-        return [dict(row) for row in rows]
+            WHERE e.run_id=? AND r.output IS NOT NULL ORDER BY r.id""", (run_id,)).fetchall()
+        population = [dict(row) for row in rows]
+        sample_size = min(limit, len(population))
+        return random.Random(seed).sample(population, sample_size)
 
     def judge_audit_agreement(self, run_id: int, human_scores: dict[int, float]) -> dict[str, float | int]:
         """Compare human labels to judge values on the same run's responses."""

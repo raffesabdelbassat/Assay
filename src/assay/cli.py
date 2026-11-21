@@ -96,13 +96,14 @@ def audit_export(
     output: Path = typer.Option(..., "--output", "-o", help="JSONL file to fill in by hand"),
     database: Path = typer.Option(Path("assay.sqlite3"), "--database", "-d", help="Assay SQLite database"),
     limit: int = typer.Option(50, "--limit", min=30, max=50, help="Export 30 to 50 examples"),
+    seed: int = typer.Option(0, "--seed", help="Seed used to reproduce the random sample"),
 ) -> None:
     """Export blind questions and answers for manual judge review."""
     from assay.storage import Storage
 
     storage = Storage(database)
     try:
-        rows = storage.judge_audit_items(run_id, limit)
+        rows = storage.judge_audit_items(run_id, limit, seed=seed)
     finally:
         storage.close()
     if len(rows) < 30:
@@ -116,7 +117,10 @@ def audit_export(
                 "answer": row["answer"],
                 "human_score": None,
             }, ensure_ascii=False) + "\n")
-    typer.echo(f"Exported {len(rows)} blind answers to {output}; fill human_score with a value from 0 to 1.")
+    typer.echo(
+        f"Exported {len(rows)} blind answers to {output} (seed {seed}); "
+        "fill human_score with a value from 0 to 1."
+    )
 
 
 @audit_app.command("agreement")

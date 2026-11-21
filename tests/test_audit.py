@@ -15,7 +15,7 @@ def test_human_audit_export_rows_are_blind_and_agreement_uses_run_threshold(tmp_
     ))
     run_id = storage.start_run(config, "now")
     response_ids = []
-    for index in range(30):
+    for index in range(60):
         example_id = storage.add_example(run_id, DatasetExample(id=f"q-{index}", input=f"Question {index}"))
         response_id = storage.add_response(
             example_db_id=example_id, provider="anthropic", model="candidate", prompt="prompt",
@@ -29,10 +29,15 @@ def test_human_audit_export_rows_are_blind_and_agreement_uses_run_threshold(tmp_
             details={"reason": "stored judge explanation"},
         )])
 
-    blind_rows = storage.judge_audit_items(run_id, 40)
-    assert len(blind_rows) == 30
+    blind_rows = storage.judge_audit_items(run_id, 40, seed=2026)
+    repeat_sample = storage.judge_audit_items(run_id, 40, seed=2026)
+    other_seed_sample = storage.judge_audit_items(run_id, 40, seed=2027)
+    assert len(blind_rows) == 40
+    assert blind_rows == repeat_sample
+    assert blind_rows != other_seed_sample
+    assert {row["response_id"] for row in blind_rows} != set(response_ids[:40])
     assert set(blind_rows[0]) == {"response_id", "question", "answer"}
-    labels = {response_id: (0.8 if index < 18 else 0.3) for index, response_id in enumerate(response_ids)}
+    labels = {response_id: (0.8 if index < 18 else 0.3) for index, response_id in enumerate(response_ids[:30])}
     agreement = storage.judge_audit_agreement(run_id, labels)
     assert agreement["count"] == 30
     assert agreement["agreement"] == 28 / 30

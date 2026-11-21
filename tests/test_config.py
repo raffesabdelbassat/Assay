@@ -4,7 +4,7 @@ import pytest
 from pydantic import ValidationError
 
 from assay.config import load_comparison_config, load_price_catalog
-from assay.models import AssayConfig
+from assay.models import AssayConfig, ComparisonConfig
 
 
 def test_prompt_template_accepts_supported_fields() -> None:
@@ -58,3 +58,13 @@ def test_pairwise_example_config_loads_its_rubric_and_prices() -> None:
     assert config.judge is not None
     assert "Factual accuracy" in config.judge.rubric
     assert "openai:gpt-5.5" in prices.models
+
+
+def test_pairwise_config_requires_at_least_two_candidate_models() -> None:
+    with pytest.raises(ValidationError, match="at least two candidate models"):
+        ComparisonConfig.model_validate({
+            "models": [{"provider": "anthropic", "model": "candidate"}],
+            "prompts": {"v1": {"prompt_template": "{input}"}},
+            "judge": {"provider": "openai", "model": "judge", "rubric": "Compare answers."},
+            "pairwise": True,
+        })

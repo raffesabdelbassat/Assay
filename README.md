@@ -37,12 +37,12 @@ Use `assay run data/sample.jsonl --config judge.example.yaml` after setting both
 To check a judge against human grades, export 30–50 blind answers from a completed judged run, fill in each `human_score` from 0 to 1, then calculate threshold-based pass/fail agreement and mean absolute score error:
 
 ```bash
-assay audit export --run-id 12 --output audit.jsonl --database assay.sqlite3 --limit 40
+assay audit export --run-id 12 --output audit.jsonl --database assay.sqlite3 --limit 40 --seed 2026
 # Fill each human_score in audit.jsonl without looking at the judge score.
 assay audit agreement --run-id 12 --labels audit.jsonl --database assay.sqlite3
 ```
 
-The agreement command uses the run's configured pass threshold for both human and judge labels. It requires 30–50 completed labels and reports agreement percentage and score error.
+The export takes a random sample from all judge-scored answers in the run. Reusing the same `--seed` with the same database contents selects the same sample. The default seed is `0`. The agreement command uses the run's configured pass threshold for both human and judge labels. It requires 30–50 completed labels and reports agreement percentage and score error.
 
 Each dataset line needs an `id` and an `input`; `expected` is optional. `id` is saved as `example_key` and supports comparing the same example across runs. Built-in scorers are `exact_match`, `contains_text`, `regex_match`, and `valid_json`. Regex uses the configured `regex_pattern` when present, otherwise it treats `expected` as the pattern. Scorers requiring an expected value return a failed score when it is absent.
 
