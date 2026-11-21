@@ -68,6 +68,10 @@ async def run_comparison(
     pairwise_enabled = config.pairwise if pairwise is None else pairwise
     if pairwise_enabled and len(config.models) < 2:
         raise ValueError("Pairwise mode requires at least two candidate models")
+    if pairwise_enabled:
+        candidate_targets = [(target.provider, target.model) for target in config.models]
+        if len(set(candidate_targets)) != len(candidate_targets):
+            raise ValueError("Pairwise mode requires distinct candidate targets; duplicate provider/model target found")
     if pairwise_enabled and config.judge is None:
         raise ValueError("Pairwise mode requires judge settings")
     missing_prices = [

@@ -143,7 +143,9 @@ def audit_agreement(
                     if item.get("human_score") is None:
                         continue
                     score = float(item["human_score"])
-                    response_id = int(item["response_id"])
+                    response_id = item.get("response_id")
+                    if isinstance(response_id, bool) or not isinstance(response_id, int):
+                        raise ValueError("response_id must be an integer JSON value")
                     if not 0 <= score <= 1:
                         raise ValueError("human_score must be between 0 and 1")
                     if response_id in human_scores:

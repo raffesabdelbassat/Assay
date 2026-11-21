@@ -189,6 +189,33 @@ async def test_pairwise_run_rejects_one_candidate_before_provider_setup(tmp_path
 
 
 @pytest.mark.asyncio
+async def test_pairwise_run_rejects_duplicate_targets_from_cli_override(tmp_path) -> None:
+    config = ComparisonConfig.model_validate({
+        "models": [
+            {"provider": "anthropic", "model": "candidate"},
+            {"provider": "anthropic", "model": "candidate"},
+        ],
+        "prompts": {"v1": {"prompt_template": "{input}"}},
+        "judge": {"provider": "openai", "model": "judge", "rubric": "Which answer is better?"},
+        "database": str(tmp_path / "not-created.sqlite3"),
+    })
+    prices = PriceCatalog(models={
+        "anthropic:candidate": {"input_per_token": 0, "output_per_token": 0},
+        "openai:judge": {"input_per_token": 0, "output_per_token": 0},
+    })
+
+    def unexpected_provider_setup(provider: str, timeout: float) -> FakeProvider:
+        raise AssertionError("duplicate target validation should happen first")
+
+    with pytest.raises(ValueError, match="Pairwise mode requires distinct candidate targets"):
+        await run_comparison(
+            [DatasetExample(id="one", input="Question")], config, prices,
+            unexpected_provider_setup, pairwise=True,
+        )
+    assert not (tmp_path / "not-created.sqlite3").exists()
+
+
+@pytest.mark.asyncio
 async def test_provider_rate_limit_is_shared_across_models(tmp_path) -> None:
     request_times: list[float] = []
 

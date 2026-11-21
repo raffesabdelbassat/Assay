@@ -80,3 +80,22 @@ def test_audit_cli_exports_blind_labels_and_reports_agreement(tmp_path) -> None:
                                    "--database", str(database)])
     assert analyzed.exit_code == 0, analyzed.output
     assert "Pass/fail agreement  100.0%" in analyzed.output
+
+
+def test_audit_agreement_rejects_fractional_response_id(tmp_path) -> None:
+    labels = tmp_path / "fractional-id.jsonl"
+    rows = [
+        {"response_id": 12.9 if index == 0 else index, "human_score": 0.8}
+        for index in range(30)
+    ]
+    labels.write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
+
+    result = CliRunner().invoke(app, [
+        "audit", "agreement", "--run-id", "1", "--labels", str(labels),
+        "--database", str(tmp_path / "unused.sqlite3"),
+    ])
+
+    assert result.exit_code != 0
+    assert "must be an integer" in result.output
+    assert "JSON value" in result.output
+    assert not (tmp_path / "unused.sqlite3").exists()

@@ -68,3 +68,16 @@ def test_pairwise_config_requires_at_least_two_candidate_models() -> None:
             "judge": {"provider": "openai", "model": "judge", "rubric": "Compare answers."},
             "pairwise": True,
         })
+
+
+def test_pairwise_config_rejects_duplicate_provider_model_targets() -> None:
+    with pytest.raises(ValidationError, match="distinct candidate targets"):
+        ComparisonConfig.model_validate({
+            "models": [
+                {"provider": "anthropic", "model": "candidate"},
+                {"provider": "anthropic", "model": "candidate"},
+            ],
+            "prompts": {"v1": {"prompt_template": "{input}"}},
+            "judge": {"provider": "openai", "model": "judge", "rubric": "Compare answers."},
+            "pairwise": True,
+        })

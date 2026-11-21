@@ -145,6 +145,10 @@ class ComparisonConfig(BaseModel):
     def require_pairwise_candidates(self) -> "ComparisonConfig":
         if self.pairwise and len(self.models) < 2:
             raise ValueError("Pairwise mode requires at least two candidate models")
+        if self.pairwise:
+            identities = [(target.provider, target.model) for target in self.models]
+            if len(set(identities)) != len(identities):
+                raise ValueError("Pairwise mode requires distinct candidate targets; duplicate provider/model target found")
         return self
 
 
