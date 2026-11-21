@@ -71,3 +71,26 @@ async def test_retry_wait_does_not_occupy_concurrency_slot(tmp_path) -> None:
     ).fetchone()
     assert row["attempts"] == 2
     storage.close()
+
+
+@pytest.mark.asyncio
+async def test_failed_model_call_counts_as_incorrect_in_accuracy(tmp_path) -> None:
+    class FailingProvider:
+        async def generate(self, *, model: str, system_prompt: str, prompt: str,
+                           temperature: float, max_tokens: int) -> ProviderResponse:
+            raise RuntimeError("provider unavailable")
+
+    config = AssayConfig(
+        database=str(tmp_path / "failed.sqlite3"),
+        generation={"retries": 0},
+    )
+    storage = Storage(config.database)
+    _, summary = await run_evaluation(
+        [DatasetExample(id="failed", input="Question", expected="Answer")],
+        config,
+        FailingProvider(),
+        no_cache=True,
+        storage=storage,
+    )
+    assert summary["accuracy"] == 0
+    storage.close()

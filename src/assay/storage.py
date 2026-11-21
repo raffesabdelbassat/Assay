@@ -141,11 +141,19 @@ class Storage:
         self.connection.commit()
 
     def summary(self, run_id: int) -> dict[str, Any]:
+        run = self.connection.execute("SELECT config_json FROM runs WHERE id=?", (run_id,)).fetchone()
+        exact_match_enabled = True
+        if run is not None:
+            config = json.loads(run["config_json"])
+            exact_match_enabled = config.get("scorers", {}).get("exact_match", True)
         row = self.connection.execute("""SELECT COUNT(DISTINCT e.id) AS examples,
-            AVG(s.passed) AS accuracy, AVG(r.latency_ms) AS average_latency_ms, SUM(r.cost) AS total_cost
+            AVG(COALESCE(s.passed, 0)) AS accuracy, AVG(r.latency_ms) AS average_latency_ms, SUM(r.cost) AS total_cost
             FROM examples e LEFT JOIN responses r ON r.example_id=e.id
             LEFT JOIN scores s ON s.response_id=r.id AND s.scorer='exact_match' WHERE e.run_id=?""", (run_id,)).fetchone()
-        return dict(row)
+        result = dict(row)
+        if not exact_match_enabled:
+            result["accuracy"] = None
+        return result
 
     def close(self) -> None:
         self.connection.close()
