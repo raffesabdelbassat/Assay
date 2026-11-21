@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from assay.models import AssayConfig, DatasetExample, ProviderResponse, ScoreResult
+from assay.scorers.pairwise import PairwiseResult
 
 
 class Storage:
@@ -85,6 +86,25 @@ class Storage:
             input_tokens INTEGER NOT NULL,
             output_tokens INTEGER NOT NULL,
             created_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS pairwise_scores (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            comparison_id TEXT NOT NULL,
+            example_key TEXT NOT NULL,
+            prompt_version TEXT NOT NULL,
+            provider_a TEXT NOT NULL,
+            model_a TEXT NOT NULL,
+            provider_b TEXT NOT NULL,
+            model_b TEXT NOT NULL,
+            winner TEXT NOT NULL,
+            reason TEXT NOT NULL,
+            judge_provider TEXT NOT NULL,
+            judge_model TEXT NOT NULL,
+            input_tokens INTEGER NOT NULL,
+            output_tokens INTEGER NOT NULL,
+            cost REAL NOT NULL,
+            latency_ms REAL NOT NULL,
+            UNIQUE(comparison_id,example_key,prompt_version,provider_a,model_a,provider_b,model_b)
         );
         CREATE INDEX IF NOT EXISTS idx_examples_run ON examples(run_id);
         CREATE INDEX IF NOT EXISTS idx_scores_response ON scores(response_id);
@@ -194,6 +214,65 @@ class Storage:
                 JOIN responses r ON r.id=s.response_id JOIN examples e ON e.id=r.example_id
                 WHERE e.run_id=? AND s.scorer='llm_judge'""", (run_id,)).fetchone()[0]
         return result
+
+    def comparison_outputs(self, comparison_id: str) -> list[dict[str, Any]]:
+        rows = self.connection.execute("""SELECT e.example_key,e.input,r.output,r.provider,r.model,rn.prompt_version
+            FROM runs rn JOIN examples e ON e.run_id=rn.id JOIN responses r ON r.example_id=e.id
+            WHERE rn.comparison_id=? AND r.output IS NOT NULL""", (comparison_id,)).fetchall()
+        return [dict(row) for row in rows]
+
+    def add_pairwise_score(self, *, comparison_id: str, example_key: str, prompt_version: str,
+                           provider_a: str, model_a: str, provider_b: str, model_b: str,
+                           judge_provider: str, judge_model: str, result: PairwiseResult) -> None:
+        self.connection.execute("""INSERT INTO pairwise_scores
+            (comparison_id,example_key,prompt_version,provider_a,model_a,provider_b,model_b,winner,reason,
+             judge_provider,judge_model,input_tokens,output_tokens,cost,latency_ms)
+            VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (comparison_id, example_key, prompt_version, provider_a, model_a, provider_b, model_b,
+             result.winner, result.reason, judge_provider, judge_model, result.input_tokens,
+             result.output_tokens, result.cost, result.latency_ms))
+        self.connection.commit()
+
+    def pairwise_scores(self, comparison_id: str) -> list[dict[str, Any]]:
+        rows = self.connection.execute("SELECT * FROM pairwise_scores WHERE comparison_id=? ORDER BY id", (comparison_id,)).fetchall()
+        return [dict(row) for row in rows]
+
+    def judge_audit_items(self, run_id: int, limit: int = 50) -> list[dict[str, Any]]:
+        """Return blindable question/answer pairs with judge scores for CLI export."""
+        rows = self.connection.execute("""SELECT r.id AS response_id,e.input AS question,r.output AS answer
+            FROM responses r JOIN examples e ON e.id=r.example_id
+            JOIN scores s ON s.response_id=r.id AND s.scorer='llm_judge'
+            WHERE e.run_id=? AND r.output IS NOT NULL ORDER BY r.id LIMIT ?""", (run_id, limit)).fetchall()
+        return [dict(row) for row in rows]
+
+    def judge_audit_agreement(self, run_id: int, human_scores: dict[int, float]) -> dict[str, float | int]:
+        """Compare human labels to judge values on the same run's responses."""
+        if not human_scores:
+            return {"count": 0, "agreement": 0.0, "mean_absolute_error": 0.0}
+        placeholders = ",".join("?" for _ in human_scores)
+        rows = self.connection.execute(f"""SELECT r.id AS response_id,s.score
+            FROM responses r JOIN examples e ON e.id=r.example_id
+            JOIN scores s ON s.response_id=r.id AND s.scorer='llm_judge'
+            WHERE e.run_id=? AND r.id IN ({placeholders})""", (run_id, *human_scores)).fetchall()
+        if not rows:
+            return {"count": 0, "agreement": 0.0, "mean_absolute_error": 0.0}
+        run = self.connection.execute("SELECT config_json FROM runs WHERE id=?", (run_id,)).fetchone()
+        threshold = 0.7
+        if run is not None:
+            configuration = json.loads(run["config_json"])
+            threshold = configuration.get("judge", {}).get("pass_threshold", threshold)
+        agreements = []
+        errors = []
+        for row in rows:
+            human_score = human_scores[row["response_id"]]
+            judge_score = row["score"]
+            agreements.append((human_score >= threshold) == (judge_score >= threshold))
+            errors.append(abs(human_score - judge_score))
+        return {
+            "count": len(rows),
+            "agreement": sum(agreements) / len(agreements),
+            "mean_absolute_error": sum(errors) / len(errors),
+        }
 
     def close(self) -> None:
         self.connection.close()

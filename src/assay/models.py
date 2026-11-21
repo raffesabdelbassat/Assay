@@ -137,6 +137,7 @@ class ComparisonConfig(BaseModel):
     provider_limits: dict[str, ProviderLimit] = Field(default_factory=dict)
     scorers: ScorerSettings = Field(default_factory=ScorerSettings)
     judge: JudgeSettings | None = None
+    pairwise: bool = False
     prices_file: str = "prices.yaml"
     database: str = "assay.sqlite3"
 

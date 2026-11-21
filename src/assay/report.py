@@ -27,6 +27,19 @@ def format_comparison_report(results: list[dict[str, Any]]) -> str:
             f"${(row.get('total_cost') or 0):.6f}"
         )
 
+    pairwise_rows = [row for row in results if "pairwise_wins" in row]
+    if pairwise_rows:
+        lines.extend([
+            "",
+            "Pairwise judge (wins / losses / ties; judge cost share)",
+        ])
+        for row in pairwise_rows:
+            lines.append(
+                f"{row['provider']}/{row['model']} prompt={row['prompt_version']}: "
+                f"{row['pairwise_wins']} / {row['pairwise_losses']} / {row['pairwise_ties']}; "
+                f"${row['pairwise_judge_cost']:.6f}"
+            )
+
     winner_specs = [
         ("Best accuracy", "accuracy", True, lambda value: f"{value:.1%}"),
         ("Fastest", "average_latency_ms", False, lambda value: f"{value:.1f} ms"),

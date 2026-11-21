@@ -124,6 +124,47 @@ async def test_comparison_runs_and_prices_the_judge_model(tmp_path) -> None:
 
 
 @pytest.mark.asyncio
+async def test_pairwise_mode_persists_winners_and_updates_model_counts(tmp_path) -> None:
+    config = ComparisonConfig.model_validate({
+        "models": [
+            {"provider": "anthropic", "model": "candidate-a"},
+            {"provider": "ollama", "model": "candidate-b"},
+        ],
+        "prompts": {"v1": {"prompt_template": "{input}"}},
+        "judge": {"provider": "openai", "model": "judge", "rubric": "Prefer concise answers.",
+                  "require_different_provider": True},
+        "pairwise": True,
+        "database": str(tmp_path / "pairwise.sqlite3"),
+    })
+    prices = PriceCatalog(models={
+        "anthropic:candidate-a": {"input_per_token": 0, "output_per_token": 0},
+        "ollama:candidate-b": {"input_per_token": 0, "output_per_token": 0},
+        "openai:judge": {"input_per_token": 0.001, "output_per_token": 0.002},
+    })
+
+    class FakePairProvider:
+        name = "fake"
+
+        async def generate(self, *, model: str, prompt: str, **kwargs) -> ProviderResponse:
+            if model == "judge":
+                return ProviderResponse(output='{"winner":"A","reason":"First answer is concise."}',
+                                        input_tokens=10, output_tokens=5)
+            return ProviderResponse(output=f"answer from {model}")
+
+    storage = Storage(config.database)
+    comparison_id, results = await run_comparison(
+        [DatasetExample(id="one", input="Question?", expected="answer")],
+        config, prices, lambda provider, timeout: FakePairProvider(), storage=storage,
+    )
+    pairs = storage.pairwise_scores(comparison_id)
+    assert len(pairs) == 1
+    assert pairs[0]["reason"] == "First answer is concise."
+    assert sum(row["pairwise_wins"] + row["pairwise_losses"] + row["pairwise_ties"] for row in results) == 2
+    assert [row["pairwise_judge_cost"] for row in results] == [0.01, 0.01]
+    storage.close()
+
+
+@pytest.mark.asyncio
 async def test_provider_rate_limit_is_shared_across_models(tmp_path) -> None:
     request_times: list[float] = []
 
