@@ -12,3 +12,11 @@ def test_load_dataset_and_reject_duplicate_ids(tmp_path) -> None:
     path.write_text('{"id":"one","input":"Q"}\n{"id":"one","input":"Q2"}\n', encoding="utf-8")
     with pytest.raises(ValueError, match="Duplicate"):
         load_dataset(path)
+
+
+def test_invalid_jsonl_error_identifies_file_and_line(tmp_path) -> None:
+    path = tmp_path / "broken.jsonl"
+    path.write_text('{"id":"one","input":"valid"}\n{broken json}\n', encoding="utf-8")
+
+    with pytest.raises(ValueError, match=r"broken\.jsonl:2"):
+        load_dataset(path)
