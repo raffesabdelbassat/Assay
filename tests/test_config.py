@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 from pydantic import ValidationError
 
@@ -46,3 +48,13 @@ def test_price_catalog_loads_rates_per_model(tmp_path) -> None:
     )
     catalog = load_price_catalog(path)
     assert catalog.models["openai:gpt-5.5"].output_per_token == 0.000002
+
+
+def test_pairwise_example_config_loads_its_rubric_and_prices() -> None:
+    project = Path(__file__).resolve().parents[1]
+    config = load_comparison_config(project / "comparison-pairwise.example.yaml")
+    prices = load_price_catalog(project / config.prices_file)
+    assert config.pairwise is True
+    assert config.judge is not None
+    assert "Factual accuracy" in config.judge.rubric
+    assert "openai:gpt-5.5" in prices.models

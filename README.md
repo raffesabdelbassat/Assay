@@ -19,14 +19,14 @@ Provider SDKs are optional extras. Set `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or
 assay run data/sample.jsonl --config config.yaml
 assay run data/sample.jsonl --config config.yaml --no-cache
 assay compare data/sample.jsonl --config comparison.example.yaml
-assay compare data/sample.jsonl --config comparison.example.yaml --pairwise
+assay compare data/sample.jsonl --config comparison-pairwise.example.yaml
 ```
 
 The comparison config runs every configured model against every named prompt version. Its `provider_limits` section can cap concurrent requests and requests per minute for each provider. The separate prices file uses `provider:model` keys and USD per token rates. Every comparison target must have an explicit price entry; use zero rates only when the model has no metered provider cost. Review and refresh `prices.example.yaml` before relying on cost rankings. The included cloud rates were checked on 2026-11-21: [Anthropic](https://www.anthropic.com/claude-haiku-5-5), [OpenAI](https://developers.openai.com/api/docs/models/gpt-5.5), and [Google](https://ai.google.dev/gemini-api/docs/pricing).
 
 The report shows each provider/model/prompt combination with accuracy, average latency, and total cost, then names the most accurate, fastest, and cheapest configuration.
 
-Add `pairwise: true` to a comparison config or use `--pairwise` to ask the configured judge which answer is better for each example and prompt version. The judge randomizes answer order by default, and report rows include wins, losses, ties, and the judge cost share. Pairwise mode needs at least two candidate models and a judge price entry.
+Use `comparison-pairwise.example.yaml` or add `pairwise: true` (or `--pairwise`) to ask the configured judge which answer is better for each example and prompt version. The judge randomizes answer order by default, and report rows include wins, losses, ties, and the judge cost share. Pairwise mode needs at least two candidate models and a judge price entry.
 
 ## AI judge scorer
 
