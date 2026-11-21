@@ -1,6 +1,6 @@
 """Anthropic Messages API adapter."""
 
-import anthropic
+from typing import Any
 
 from assay.models import ProviderResponse
 from assay.providers.base import Provider
@@ -11,8 +11,12 @@ class AnthropicProvider(Provider):
 
     name = "anthropic"
 
-    def __init__(self, *, timeout_seconds: float = 60.0) -> None:
-        self.client = anthropic.AsyncAnthropic(timeout=timeout_seconds)
+    def __init__(self, *, timeout_seconds: float = 60.0, client: Any | None = None) -> None:
+        if client is None:
+            import anthropic
+
+            client = anthropic.AsyncAnthropic(timeout=timeout_seconds)
+        self.client = client
 
     async def generate(
         self,
@@ -23,13 +27,15 @@ class AnthropicProvider(Provider):
         temperature: float,
         max_tokens: int,
     ) -> ProviderResponse:
-        response = await self.client.messages.create(
-            model=model,
-            system=system_prompt,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=temperature,
-            max_tokens=max_tokens,
-        )
+        request: dict[str, Any] = {
+            "model": model,
+            "system": system_prompt,
+            "messages": [{"role": "user", "content": prompt}],
+            "max_tokens": max_tokens,
+        }
+        if temperature != 1.0:
+            request["extra_body"] = {"temperature": temperature}
+        response = await self.client.messages.create(**request)
         output = "".join(block.text for block in response.content if block.type == "text")
         return ProviderResponse(
             output=output,
