@@ -1,4 +1,5 @@
 import pytest
+import time
 
 from assay.comparison import run_comparison
 from assay.models import ComparisonConfig, DatasetExample, PriceCatalog, ProviderResponse
@@ -68,3 +69,38 @@ async def test_comparison_requires_explicit_prices_for_every_model(tmp_path) -> 
             PriceCatalog(models={}),
             lambda provider, timeout: FakeProvider(provider),
         )
+
+
+@pytest.mark.asyncio
+async def test_provider_rate_limit_is_shared_across_models(tmp_path) -> None:
+    request_times: list[float] = []
+
+    class TimedProvider(FakeProvider):
+        async def generate(self, *, model: str, system_prompt: str, prompt: str,
+                           temperature: float, max_tokens: int) -> ProviderResponse:
+            request_times.append(time.monotonic())
+            return ProviderResponse(output="ok")
+
+    config = ComparisonConfig.model_validate({
+        "models": [
+            {"provider": "openai", "model": "gpt-a"},
+            {"provider": "openai", "model": "gpt-b"},
+        ],
+        "prompts": {"v1": {"prompt_template": "{input}"}},
+        "provider_limits": {"openai": {"concurrency": 2, "requests_per_minute": 600}},
+        "database": str(tmp_path / "rate-limit.sqlite3"),
+    })
+    prices = PriceCatalog(models={
+        "openai:gpt-a": {"input_per_token": 0, "output_per_token": 0},
+        "openai:gpt-b": {"input_per_token": 0, "output_per_token": 0},
+    })
+
+    await run_comparison(
+        [DatasetExample(id="one", input="question")],
+        config,
+        prices,
+        lambda provider, timeout: TimedProvider(provider),
+    )
+
+    assert len(request_times) == 2
+    assert request_times[1] - request_times[0] >= 0.08
