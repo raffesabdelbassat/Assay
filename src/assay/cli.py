@@ -7,9 +7,20 @@ import typer
 
 from assay.config import load_config
 from assay.dataset import load_dataset
+from assay.models import AssayConfig
+from assay.providers.base import Provider
 from assay.runner import run_evaluation
 
 app = typer.Typer(help="Evaluate an LLM against a JSONL dataset.")
+
+
+def create_provider(settings: AssayConfig) -> Provider:
+    """Create the configured provider; provider SDKs load only when selected."""
+    if settings.provider == "anthropic":
+        from assay.providers.anthropic import AnthropicProvider
+
+        return AnthropicProvider(timeout_seconds=settings.generation.timeout_seconds)
+    raise ValueError(f"Unsupported provider: {settings.provider}")
 
 
 @app.command()
@@ -21,11 +32,10 @@ def run(
     """Run an evaluation and print its summary."""
     settings = load_config(config)
     examples = load_dataset(dataset)
-    if settings.provider != "anthropic":
-        raise typer.BadParameter(f"Unsupported provider: {settings.provider}")
-    from assay.providers.anthropic import AnthropicProvider
-
-    provider = AnthropicProvider(timeout_seconds=settings.generation.timeout_seconds)
+    try:
+        provider = create_provider(settings)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
     run_id, summary = asyncio.run(run_evaluation(examples, settings, provider, no_cache=no_cache))
     typer.echo(f"Run {run_id}")
     typer.echo("Metric              Value")
