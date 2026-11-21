@@ -64,6 +64,7 @@ async def run_evaluation(examples: list[DatasetExample], config: AssayConfig, pr
                             model=config.model, system_prompt=config.system_prompt, prompt=prompt,
                             temperature=config.generation.temperature, max_tokens=config.generation.max_tokens,
                         ), timeout=config.generation.timeout_seconds)
+                    error = None
                     break
                 except Exception as exc:  # record provider errors and retry transient failures
                     error = f"{type(exc).__name__}: {exc}"

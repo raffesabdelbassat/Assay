@@ -68,9 +68,10 @@ async def test_retry_wait_does_not_occupy_concurrency_slot(tmp_path) -> None:
 
     assert call_order == ["A", "B", "A"]
     row = storage.connection.execute(
-        "SELECT attempts FROM responses r JOIN examples e ON e.id=r.example_id WHERE e.example_key='a'"
+        "SELECT attempts,error FROM responses r JOIN examples e ON e.id=r.example_id WHERE e.example_key='a'"
     ).fetchone()
     assert row["attempts"] == 2
+    assert row["error"] is None
     storage.close()
 
 
