@@ -11,7 +11,6 @@ from assay.models import (
     ComparisonConfig,
     DatasetExample,
     PriceCatalog,
-    PriceSettings,
     ProviderLimit,
     ProviderResponse,
 )
@@ -64,6 +63,15 @@ async def run_comparison(
     """Run every configured model against every named prompt version."""
     db = storage or Storage(config.database)
     comparison_id = str(uuid4())
+    missing_prices = [
+        f"{target.provider}:{target.model}"
+        for target in config.models
+        if f"{target.provider}:{target.model}" not in prices.models
+    ]
+    if missing_prices:
+        if storage is None:
+            db.close()
+        raise ValueError(f"Missing price entries for: {', '.join(missing_prices)}")
     limits = {
         provider_name: config.provider_limits.get(provider_name, ProviderLimit())
         for provider_name in {target.provider for target in config.models}
@@ -83,7 +91,7 @@ async def run_comparison(
                 system_prompt=prompt.system_prompt,
                 prompt_template=prompt.prompt_template,
                 generation=config.generation.model_copy(update={"concurrency": limit.concurrency}),
-                prices=prices.models.get(f"{target.provider}:{target.model}", PriceSettings()),
+                prices=prices.models[f"{target.provider}:{target.model}"],
                 scorers=config.scorers,
                 prompt_version=version,
                 comparison_id=comparison_id,

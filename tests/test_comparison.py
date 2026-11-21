@@ -33,6 +33,7 @@ async def test_comparison_runs_models_and_named_prompts_without_api(tmp_path) ->
         "models": {
             "anthropic:haiku": {"input_per_token": 0.001, "output_per_token": 0.002},
             "openai:gpt": {"input_per_token": 0.002, "output_per_token": 0.003},
+            "ollama:llama": {"input_per_token": 0, "output_per_token": 0},
         }
     })
     storage = Storage(config.database)
@@ -51,3 +52,19 @@ async def test_comparison_runs_models_and_named_prompts_without_api(tmp_path) ->
     assert rows["n"] == 6
     assert next(row["total_cost"] for row in results if row["model"] == "haiku") == 0.014
     storage.close()
+
+
+@pytest.mark.asyncio
+async def test_comparison_requires_explicit_prices_for_every_model(tmp_path) -> None:
+    config = ComparisonConfig.model_validate({
+        "models": [{"provider": "openai", "model": "gpt"}],
+        "prompts": {"v1": {"prompt_template": "{input}"}},
+        "database": str(tmp_path / "missing-prices.sqlite3"),
+    })
+    with pytest.raises(ValueError, match="Missing price entries for: openai:gpt"):
+        await run_comparison(
+            [DatasetExample(id="one", input="question")],
+            config,
+            PriceCatalog(models={}),
+            lambda provider, timeout: FakeProvider(provider),
+        )
