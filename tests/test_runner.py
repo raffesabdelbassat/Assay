@@ -188,3 +188,51 @@ async def test_runner_does_not_retry_permanent_api_errors(tmp_path) -> None:
     attempts = storage.connection.execute("SELECT attempts FROM responses").fetchone()["attempts"]
     assert calls == attempts == 1
     storage.close()
+
+
+@pytest.mark.asyncio
+async def test_runner_persists_async_judge_score_reason_cost_and_latency(tmp_path) -> None:
+    class CandidateProvider:
+        async def generate(self, **kwargs) -> ProviderResponse:
+            return ProviderResponse(output="A polished summary", input_tokens=10, output_tokens=2)
+
+    class JudgeProvider:
+        async def generate(self, **kwargs) -> ProviderResponse:
+            assert "A good summary is accurate" in kwargs["prompt"]
+            return ProviderResponse(
+                output='{"score":0.9,"reason":"Accurate and concise."}',
+                input_tokens=100,
+                output_tokens=20,
+            )
+
+    config = AssayConfig(
+        database=str(tmp_path / "judge.sqlite3"),
+        prices={"input_per_token": 0.001, "output_per_token": 0.002},
+        scorers={"exact_match": False, "contains_text": False, "regex_match": False, "valid_json": False},
+        judge={
+            "provider": "openai",
+            "model": "strong-judge",
+            "rubric": "A good summary is accurate and concise.",
+            "pass_threshold": 0.8,
+            "prices": {"input_per_token": 0.000001, "output_per_token": 0.000002},
+        },
+    )
+    storage = Storage(config.database)
+    _, summary = await run_evaluation(
+        [DatasetExample(id="summary", input="Summarize the article.", expected="gold answer")],
+        config,
+        CandidateProvider(),
+        judge_provider=JudgeProvider(),
+        no_cache=True,
+        storage=storage,
+    )
+
+    assert summary["accuracy"] is None
+    assert summary["total_cost"] == pytest.approx(0.01414)
+    assert summary["average_latency_ms"] > 0
+    row = storage.connection.execute("SELECT * FROM scores WHERE scorer='llm_judge'").fetchone()
+    assert row["passed"] == 1
+    assert row["provider"] == "openai" and row["model"] == "strong-judge"
+    assert json.loads(row["details_json"])["reason"] == "Accurate and concise."
+    assert row["input_tokens"] == 100 and row["output_tokens"] == 20
+    storage.close()

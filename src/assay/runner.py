@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import inspect
 import json
 import time
 from datetime import datetime, timezone
@@ -12,6 +13,7 @@ from typing import Any
 from assay.models import AssayConfig, DatasetExample, ProviderResponse
 from assay.providers.base import Provider
 from assay.scorers import build_scorers
+from assay.scorers.judge import JudgeScorer
 from assay.storage import Storage
 
 
@@ -39,13 +41,18 @@ def cache_key(config: AssayConfig, prompt: str) -> str:
 
 
 async def run_evaluation(examples: list[DatasetExample], config: AssayConfig, provider: Provider,
-                         *, no_cache: bool = False, storage: Storage | None = None) -> tuple[int, dict[str, Any]]:
+                         *, no_cache: bool = False, storage: Storage | None = None,
+                         judge_provider: Provider | None = None) -> tuple[int, dict[str, Any]]:
     """Run dataset items with a concurrency cap and persist the results."""
+    if config.judge is not None and judge_provider is None:
+        raise ValueError("A judge_provider is required when judge settings are configured")
     db = storage or Storage(config.database)
     run_id = db.start_run(config, _now())
     example_rows = [(example, db.add_example(run_id, example)) for example in examples]
     semaphore = asyncio.Semaphore(config.generation.concurrency)
     scorers = build_scorers(config.scorers)
+    if config.judge is not None and judge_provider is not None:
+        scorers.append(JudgeScorer(config.judge, judge_provider))
 
     async def process(example: DatasetExample, example_db_id: int) -> bool:
         prompt = config.prompt_template.format(input=example.input, expected=example.expected or "", id=example.id)
@@ -87,7 +94,16 @@ async def run_evaluation(examples: list[DatasetExample], config: AssayConfig, pr
                                       prompt=prompt, system_prompt=config.system_prompt, response=response, cost=cost,
                                       latency_ms=latency_ms, attempts=attempts, cache_hit=cached is not None, error=error)
         if response is not None:
-            db.add_scores(response_id, [scorer.score(response.output, example.expected) for scorer in scorers])
+            score_results = []
+            for scorer in scorers:
+                if isinstance(scorer, JudgeScorer):
+                    result = await scorer.score_example(example.input, response.output, example.expected)
+                else:
+                    result = scorer.score(response.output, example.expected)
+                    if inspect.isawaitable(result):
+                        result = await result
+                score_results.append(result)
+            db.add_scores(response_id, score_results)
         return response is None
 
     try:

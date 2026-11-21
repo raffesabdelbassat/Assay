@@ -41,6 +41,24 @@ class PriceSettings(BaseModel):
     output_per_token: float = Field(default=0.0, ge=0.0)
 
 
+class JudgeSettings(BaseModel):
+    """LLM-based scorer settings and its model-specific prices."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    provider: str
+    model: str
+    rubric: str = Field(min_length=1)
+    pass_threshold: float = Field(default=0.7, ge=0.0, le=1.0)
+    temperature: float = Field(default=1.0, ge=0.0, le=1.0)
+    max_tokens: int = Field(default=512, gt=0)
+    concurrency: int = Field(default=2, gt=0)
+    retries: int = Field(default=2, ge=0)
+    retry_backoff_seconds: float = Field(default=0.5, ge=0.0)
+    timeout_seconds: float = Field(default=60.0, gt=0.0)
+    prices: PriceSettings = Field(default_factory=PriceSettings)
+
+
 class ScorerSettings(BaseModel):
     """Configuration for the built-in scorer plugin names."""
 
@@ -107,6 +125,7 @@ class ComparisonConfig(BaseModel):
     generation: GenerationSettings = Field(default_factory=GenerationSettings)
     provider_limits: dict[str, ProviderLimit] = Field(default_factory=dict)
     scorers: ScorerSettings = Field(default_factory=ScorerSettings)
+    judge: JudgeSettings | None = None
     prices_file: str = "prices.yaml"
     database: str = "assay.sqlite3"
 
@@ -131,6 +150,7 @@ class AssayConfig(BaseModel):
     generation: GenerationSettings = Field(default_factory=GenerationSettings)
     prices: PriceSettings = Field(default_factory=PriceSettings)
     scorers: ScorerSettings = Field(default_factory=ScorerSettings)
+    judge: JudgeSettings | None = None
     prompt_version: str | None = None
     comparison_id: str | None = None
     database: str = "assay.sqlite3"
@@ -165,3 +185,9 @@ class ScoreResult(BaseModel):
     passed: bool
     score: float = Field(ge=0.0, le=1.0)
     details: dict[str, Any] = Field(default_factory=dict)
+    provider: str | None = None
+    model: str | None = None
+    input_tokens: int = Field(default=0, ge=0)
+    output_tokens: int = Field(default=0, ge=0)
+    cost: float = Field(default=0.0, ge=0.0)
+    latency_ms: float = Field(default=0.0, ge=0.0)

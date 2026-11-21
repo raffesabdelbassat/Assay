@@ -65,6 +65,12 @@ class Storage:
             passed INTEGER NOT NULL,
             score REAL NOT NULL,
             details_json TEXT NOT NULL,
+            provider TEXT,
+            model TEXT,
+            input_tokens INTEGER NOT NULL DEFAULT 0,
+            output_tokens INTEGER NOT NULL DEFAULT 0,
+            cost REAL NOT NULL DEFAULT 0,
+            latency_ms REAL NOT NULL DEFAULT 0,
             UNIQUE(response_id, scorer)
         );
         CREATE TABLE IF NOT EXISTS response_cache (
@@ -96,6 +102,17 @@ class Storage:
             self.connection.execute("ALTER TABLE runs ADD COLUMN comparison_id TEXT")
         if "prompt_version" not in columns:
             self.connection.execute("ALTER TABLE runs ADD COLUMN prompt_version TEXT")
+        score_columns = {row["name"] for row in self.connection.execute("PRAGMA table_info(scores)")}
+        for name, declaration in {
+            "provider": "TEXT",
+            "model": "TEXT",
+            "input_tokens": "INTEGER NOT NULL DEFAULT 0",
+            "output_tokens": "INTEGER NOT NULL DEFAULT 0",
+            "cost": "REAL NOT NULL DEFAULT 0",
+            "latency_ms": "REAL NOT NULL DEFAULT 0",
+        }.items():
+            if name not in score_columns:
+                self.connection.execute(f"ALTER TABLE scores ADD COLUMN {name} {declaration}")
         self.connection.commit()
 
     def start_run(self, config: AssayConfig, started_at: str) -> int:
@@ -139,8 +156,11 @@ class Storage:
         return int(cursor.lastrowid)
 
     def add_scores(self, response_id: int, scores: list[ScoreResult]) -> None:
-        self.connection.executemany("INSERT INTO scores(response_id,scorer,passed,score,details_json) VALUES(?,?,?,?,?)",
-            [(response_id, s.scorer, int(s.passed), s.score, json.dumps(s.details)) for s in scores])
+        self.connection.executemany("""INSERT INTO scores
+            (response_id,scorer,passed,score,details_json,provider,model,input_tokens,output_tokens,cost,latency_ms)
+            VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
+            [(response_id, s.scorer, int(s.passed), s.score, json.dumps(s.details), s.provider, s.model,
+              s.input_tokens, s.output_tokens, s.cost, s.latency_ms) for s in scores])
         self.connection.commit()
 
     def finish_run(self, run_id: int, finished_at: str, *, status: str = "completed", error: str | None = None) -> None:
@@ -154,9 +174,14 @@ class Storage:
             config = json.loads(run["config_json"])
             exact_match_enabled = config.get("scorers", {}).get("exact_match", True)
         row = self.connection.execute("""SELECT COUNT(DISTINCT e.id) AS examples,
-            AVG(COALESCE(s.passed, 0)) AS accuracy, AVG(r.latency_ms) AS average_latency_ms, SUM(r.cost) AS total_cost
+            AVG(COALESCE(s.passed, 0)) AS accuracy,
+            AVG(COALESCE(r.latency_ms, 0) + COALESCE((SELECT SUM(s2.latency_ms) FROM scores s2
+                WHERE s2.response_id=r.id), 0)) AS average_latency_ms,
+            COALESCE(SUM(r.cost), 0) + COALESCE((SELECT SUM(s3.cost) FROM scores s3
+                JOIN responses r3 ON r3.id=s3.response_id JOIN examples e3 ON e3.id=r3.example_id
+                WHERE e3.run_id=?), 0) AS total_cost
             FROM examples e LEFT JOIN responses r ON r.example_id=e.id
-            LEFT JOIN scores s ON s.response_id=r.id AND s.scorer='exact_match' WHERE e.run_id=?""", (run_id,)).fetchone()
+            LEFT JOIN scores s ON s.response_id=r.id AND s.scorer='exact_match' WHERE e.run_id=?""", (run_id, run_id)).fetchone()
         result = dict(row)
         if not exact_match_enabled:
             result["accuracy"] = None
