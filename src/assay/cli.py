@@ -7,7 +7,6 @@ import typer
 
 from assay.config import load_config
 from assay.dataset import load_dataset
-from assay.providers.anthropic import AnthropicProvider
 from assay.runner import run_evaluation
 
 app = typer.Typer(help="Evaluate an LLM against a JSONL dataset.")
@@ -24,6 +23,8 @@ def run(
     examples = load_dataset(dataset)
     if settings.provider != "anthropic":
         raise typer.BadParameter(f"Unsupported provider: {settings.provider}")
+    from assay.providers.anthropic import AnthropicProvider
+
     provider = AnthropicProvider(timeout_seconds=settings.generation.timeout_seconds)
     run_id, summary = asyncio.run(run_evaluation(examples, settings, provider, no_cache=no_cache))
     typer.echo(f"Run {run_id}")
