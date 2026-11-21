@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import string
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -69,6 +70,20 @@ class AssayConfig(BaseModel):
     prices: PriceSettings = Field(default_factory=PriceSettings)
     scorers: ScorerSettings = Field(default_factory=ScorerSettings)
     database: str = "assay.sqlite3"
+
+    @field_validator("prompt_template")
+    @classmethod
+    def validate_prompt_template(cls, value: str) -> str:
+        allowed_fields = {"input", "expected", "id"}
+        try:
+            for _, field_name, _, _ in string.Formatter().parse(value):
+                if field_name is not None and field_name not in allowed_fields:
+                    raise ValueError(
+                        f"Unknown prompt template field {field_name!r}; use {', '.join(sorted(allowed_fields))}"
+                    )
+        except ValueError as exc:
+            raise ValueError(f"Invalid prompt template: {exc}") from exc
+        return value
 
 
 class ProviderResponse(BaseModel):
