@@ -169,23 +169,23 @@ class Storage:
 
     def summary(self, run_id: int) -> dict[str, Any]:
         run = self.connection.execute("SELECT config_json FROM runs WHERE id=?", (run_id,)).fetchone()
-        exact_match_enabled = True
         judge_enabled = False
         if run is not None:
             config = json.loads(run["config_json"])
-            exact_match_enabled = config.get("scorers", {}).get("exact_match", True)
             judge_enabled = config.get("judge") is not None
-        primary_scorer = "llm_judge" if judge_enabled else "exact_match"
         row = self.connection.execute("""SELECT COUNT(DISTINCT e.id) AS examples,
-            AVG(COALESCE(s.passed, 0)) AS accuracy,
+            AVG(CASE WHEN sj.passed IS NOT NULL THEN sj.passed ELSE COALESCE(se.passed, 0) END) AS accuracy,
             AVG(COALESCE(r.latency_ms, 0) + COALESCE((SELECT SUM(s2.latency_ms) FROM scores s2
                 WHERE s2.response_id=r.id), 0)) AS average_latency_ms,
             COALESCE(SUM(r.cost), 0) + COALESCE((SELECT SUM(s3.cost) FROM scores s3
                 JOIN responses r3 ON r3.id=s3.response_id JOIN examples e3 ON e3.id=r3.example_id
                 WHERE e3.run_id=?), 0) AS total_cost
             FROM examples e LEFT JOIN responses r ON r.example_id=e.id
-            LEFT JOIN scores s ON s.response_id=r.id AND s.scorer=? WHERE e.run_id=?""", (run_id, primary_scorer, run_id)).fetchone()
+            LEFT JOIN scores se ON se.response_id=r.id AND se.scorer='exact_match'
+            LEFT JOIN scores sj ON sj.response_id=r.id AND sj.scorer='llm_judge' WHERE e.run_id=?""", (run_id, run_id)).fetchone()
         result = dict(row)
+        config = json.loads(run["config_json"]) if run is not None else {}
+        exact_match_enabled = config.get("scorers", {}).get("exact_match", True)
         if not exact_match_enabled and not judge_enabled:
             result["accuracy"] = None
         result["average_judge_score"] = None

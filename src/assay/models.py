@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 import string
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -50,6 +50,7 @@ class JudgeSettings(BaseModel):
     model: str
     rubric: str | None = Field(default=None, min_length=1)
     rubric_file: str | None = None
+    when: Literal["always", "simple_failure", "missing_expected"] = "always"
     pass_threshold: float = Field(default=0.7, ge=0.0, le=1.0)
     temperature: float = Field(default=1.0, ge=0.0, le=1.0)
     max_tokens: int = Field(default=512, gt=0)

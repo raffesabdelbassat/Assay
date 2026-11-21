@@ -236,3 +236,35 @@ async def test_runner_persists_async_judge_score_reason_cost_and_latency(tmp_pat
     assert json.loads(row["details_json"])["reason"] == "Accurate and concise."
     assert row["input_tokens"] == 100 and row["output_tokens"] == 20
     storage.close()
+
+
+@pytest.mark.asyncio
+async def test_simple_pass_skips_configured_fallback_judge(tmp_path) -> None:
+    judge_calls = 0
+
+    class CountingJudge:
+        async def generate(self, **kwargs) -> ProviderResponse:
+            nonlocal judge_calls
+            judge_calls += 1
+            return ProviderResponse(output='{"score":1,"reason":"Excellent."}')
+
+    config = AssayConfig(
+        database=str(tmp_path / "fallback-judge.sqlite3"),
+        prompt_template="{input}",
+        scorers={"exact_match": True, "contains_text": False, "regex_match": False, "valid_json": False},
+        judge={"provider": "openai", "model": "judge", "rubric": "Correctness.", "when": "simple_failure"},
+    )
+    storage = Storage(config.database)
+    _, summary = await run_evaluation(
+        [DatasetExample(id="matched", input="Q", expected="42")],
+        config,
+        FakeProvider(),
+        judge_provider=CountingJudge(),
+        no_cache=True,
+        storage=storage,
+    )
+    assert judge_calls == 0
+    assert summary["accuracy"] == 1
+    assert summary["average_judge_score"] is None
+    assert storage.connection.execute("SELECT COUNT(*) FROM scores WHERE scorer='llm_judge'").fetchone()[0] == 0
+    storage.close()

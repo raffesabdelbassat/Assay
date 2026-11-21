@@ -53,7 +53,7 @@ def run(
     typer.echo(f"Accuracy            {summary['accuracy'] if summary['accuracy'] is not None else 0:.1%}")
     if settings.judge is not None:
         judge_score = summary.get("average_judge_score")
-        typer.echo(f"Judge average score {judge_score if judge_score is not None else 0:.2f}")
+        typer.echo(f"Judge average score {judge_score:.2f}" if judge_score is not None else "Judge average score n/a")
     typer.echo(f"Average latency     {summary['average_latency_ms'] or 0:.1f} ms")
     typer.echo(f"Total cost          ${summary['total_cost'] or 0:.6f}")
 

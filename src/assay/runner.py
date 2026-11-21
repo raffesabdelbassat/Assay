@@ -51,8 +51,7 @@ async def run_evaluation(examples: list[DatasetExample], config: AssayConfig, pr
     example_rows = [(example, db.add_example(run_id, example)) for example in examples]
     semaphore = asyncio.Semaphore(config.generation.concurrency)
     scorers = build_scorers(config.scorers)
-    if config.judge is not None and judge_provider is not None:
-        scorers.append(JudgeScorer(config.judge, judge_provider))
+    judge_scorer = JudgeScorer(config.judge, judge_provider) if config.judge is not None and judge_provider is not None else None
 
     async def process(example: DatasetExample, example_db_id: int) -> bool:
         prompt = config.prompt_template.format(input=example.input, expected=example.expected or "", id=example.id)
@@ -96,13 +95,17 @@ async def run_evaluation(examples: list[DatasetExample], config: AssayConfig, pr
         if response is not None:
             score_results = []
             for scorer in scorers:
-                if isinstance(scorer, JudgeScorer):
-                    result = await scorer.score_example(example.input, response.output, example.expected)
-                else:
-                    result = scorer.score(response.output, example.expected)
-                    if inspect.isawaitable(result):
-                        result = await result
+                result = scorer.score(response.output, example.expected)
+                if inspect.isawaitable(result):
+                    result = await result
                 score_results.append(result)
+            should_judge = judge_scorer is not None
+            if should_judge and config.judge.when == "missing_expected":
+                should_judge = example.expected is None
+            elif should_judge and config.judge.when == "simple_failure":
+                should_judge = not any(result.passed for result in score_results)
+            if should_judge and judge_scorer is not None:
+                score_results.append(await judge_scorer.score_example(example.input, response.output, example.expected))
             db.add_scores(response_id, score_results)
         return response is None
 
