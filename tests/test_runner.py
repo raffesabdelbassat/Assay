@@ -129,3 +129,30 @@ async def test_runner_respects_configured_concurrency_limit(tmp_path) -> None:
     )
     assert max_active_calls == 2
     storage.close()
+
+
+@pytest.mark.asyncio
+async def test_no_cache_bypasses_reads_and_writes(tmp_path) -> None:
+    calls = 0
+
+    class CountingProvider:
+        async def generate(self, *, model: str, system_prompt: str, prompt: str,
+                           temperature: float, max_tokens: int) -> ProviderResponse:
+            nonlocal calls
+            calls += 1
+            return ProviderResponse(output=f"answer-{calls}", input_tokens=1, output_tokens=1)
+
+    config = AssayConfig(database=str(tmp_path / "no-cache.sqlite3"), prompt_template="{input}",
+                         prices={"input_per_token": 0.01, "output_per_token": 0.01})
+    example = DatasetExample(id="one", input="Question")
+    provider = CountingProvider()
+    storage = Storage(config.database)
+    await run_evaluation([example], config, provider, storage=storage)
+    _, uncached = await run_evaluation([example], config, provider, no_cache=True, storage=storage)
+    _, cached_again = await run_evaluation([example], config, provider, storage=storage)
+
+    assert calls == 2
+    assert uncached["total_cost"] == 0.02
+    assert cached_again["total_cost"] == 0
+    assert storage.connection.execute("SELECT COUNT(*) FROM response_cache").fetchone()[0] == 1
+    storage.close()
