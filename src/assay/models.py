@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class DatasetExample(BaseModel):
@@ -45,6 +46,16 @@ class ScorerSettings(BaseModel):
     case_sensitive: bool = True
     strip_whitespace: bool = True
     regex_pattern: str | None = None
+
+    @field_validator("regex_pattern")
+    @classmethod
+    def validate_regex_pattern(cls, value: str | None) -> str | None:
+        if value is not None:
+            try:
+                re.compile(value)
+            except re.error as exc:
+                raise ValueError(f"Invalid scorer regex pattern: {exc}") from exc
+        return value
 
 
 class AssayConfig(BaseModel):
