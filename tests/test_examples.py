@@ -24,3 +24,10 @@ def test_comparison_examples_cover_three_providers_and_prices() -> None:
     assert {target.provider for target in config.models} == {"anthropic", "openai", "google"}
     assert set(config.prompts) == {"v1", "v2"}
     assert target_keys <= set(prices.models)
+
+
+def test_judge_example_config_validates() -> None:
+    config = load_config(ROOT / "judge.example.yaml")
+    assert config.judge is not None
+    assert config.judge.provider == "openai"
+    assert config.judge.pass_threshold == 0.7

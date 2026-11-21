@@ -25,9 +25,17 @@ The comparison config runs every configured model against every named prompt ver
 
 The report shows each provider/model/prompt combination with accuracy, average latency, and total cost, then names the most accurate, fastest, and cheapest configuration.
 
+## AI judge scorer
+
+Add a `judge` section to a single-run config (see `judge.example.yaml`) to grade open-ended answers. Configure a separate provider/model, rubric, pass threshold, generation limits, and that judge model's per-token prices. The judge receives only the question, candidate answer, and rubric; it does not receive the dataset's `expected` answer. Its JSON `score` and `reason` are stored with the response. When enabled, summary accuracy is the fraction of judge scores at or above `pass_threshold`, and the CLI also prints the average numeric judge score. Judge tokens, latency, and cost are included in run totals.
+
+Use `assay run data/sample.jsonl --config judge.example.yaml` after setting both `ANTHROPIC_API_KEY` and `OPENAI_API_KEY`. This command makes real API calls; tests use fake providers instead.
+
 Each dataset line needs an `id` and an `input`; `expected` is optional. `id` is saved as `example_key` and supports comparing the same example across runs. Built-in scorers are `exact_match`, `contains_text`, `regex_match`, and `valid_json`. Regex uses the configured `regex_pattern` when present, otherwise it treats `expected` as the pattern. Scorers requiring an expected value return a failed score when it is absent.
 
 SQLite stores the complete configuration (including named prompts and scorer settings), comparison and run IDs, run-time prices, examples, outputs, token counts, estimated cost, latency, attempts, scorer results, and response cache. Cache hits have zero cost in the run where they are reused. The cache key includes provider, model, system prompt, rendered prompt, temperature, and max tokens.
+
+The included comparison prices were checked on 2026-11-21: [Anthropic](https://www.anthropic.com/claude-haiku-5-5), [OpenAI GPT-5.5](https://developers.openai.com/api/docs/models/gpt-5.5), and [Google](https://ai.google.dev/gemini-api/docs/pricing). The judge example uses the [OpenAI pricing page](https://developers.openai.com/api/docs/pricing). Refresh rates before using cost rankings.
 
 ## Add a scorer
 

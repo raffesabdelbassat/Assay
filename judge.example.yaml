@@ -1,0 +1,32 @@
+provider: anthropic
+model: claude-haiku-5-5
+system_prompt: "Answer the question clearly."
+prompt_template: "{input}"
+generation:
+  temperature: 1.0
+  max_tokens: 512
+  concurrency: 5
+  retries: 3
+prices:
+  input_per_token: 0.0000001
+  output_per_token: 0.0000005
+scorers:
+  exact_match: false
+  contains_text: false
+  regex_match: false
+  valid_json: false
+judge:
+  provider: openai
+  model: gpt-6.2-astra
+  rubric: |-
+    Score from 0 to 1. Reward factual accuracy, coverage of the important points,
+    and concise wording. Penalize unsupported claims and omissions.
+  pass_threshold: 0.7
+  temperature: 1.0
+  max_tokens: 256
+  concurrency: 2
+  retries: 2
+  prices:
+    input_per_token: 0.000008
+    output_per_token: 0.00004
+database: assay.sqlite3
