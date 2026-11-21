@@ -48,7 +48,7 @@ async def test_retry_wait_does_not_occupy_concurrency_slot(tmp_path) -> None:
             call_order.append(prompt)
             if prompt == "A" and attempts == 0:
                 attempts += 1
-                raise RuntimeError("temporary failure")
+                raise TimeoutError("temporary failure")
             return ProviderResponse(output="ok")
 
     config = AssayConfig(
@@ -155,4 +155,35 @@ async def test_no_cache_bypasses_reads_and_writes(tmp_path) -> None:
     assert uncached["total_cost"] == 0.02
     assert cached_again["total_cost"] == 0
     assert storage.connection.execute("SELECT COUNT(*) FROM response_cache").fetchone()[0] == 1
+    storage.close()
+
+
+@pytest.mark.asyncio
+async def test_runner_does_not_retry_permanent_api_errors(tmp_path) -> None:
+    class BadRequestError(Exception):
+        status_code = 400
+
+    calls = 0
+
+    class BadRequestProvider:
+        async def generate(self, *, model: str, system_prompt: str, prompt: str,
+                           temperature: float, max_tokens: int) -> ProviderResponse:
+            nonlocal calls
+            calls += 1
+            raise BadRequestError("invalid model")
+
+    config = AssayConfig(
+        database=str(tmp_path / "bad-request.sqlite3"),
+        generation={"retries": 3, "retry_backoff_seconds": 0.0},
+    )
+    storage = Storage(config.database)
+    await run_evaluation(
+        [DatasetExample(id="bad", input="Question")],
+        config,
+        BadRequestProvider(),
+        no_cache=True,
+        storage=storage,
+    )
+    attempts = storage.connection.execute("SELECT attempts FROM responses").fetchone()["attempts"]
+    assert calls == attempts == 1
     storage.close()

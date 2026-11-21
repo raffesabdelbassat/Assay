@@ -19,6 +19,16 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _is_retryable(exc: Exception) -> bool:
+    """Retry transient transport and server failures, not invalid requests."""
+    status_code = getattr(exc, "status_code", None)
+    if status_code is not None:
+        return status_code in {408, 429} or status_code >= 500
+    if isinstance(exc, (TimeoutError, ConnectionError)):
+        return True
+    return type(exc).__name__ in {"APIConnectionError", "APITimeoutError", "RateLimitError"}
+
+
 def cache_key(config: AssayConfig, prompt: str) -> str:
     """Hash all model-call inputs that can affect the response."""
     payload = {"provider": config.provider, "model": config.model, "system_prompt": config.system_prompt,
@@ -55,8 +65,10 @@ async def run_evaluation(examples: list[DatasetExample], config: AssayConfig, pr
                             temperature=config.generation.temperature, max_tokens=config.generation.max_tokens,
                         ), timeout=config.generation.timeout_seconds)
                     break
-                except Exception as exc:  # provider and timeout errors are retried uniformly
+                except Exception as exc:  # record provider errors and retry transient failures
                     error = f"{type(exc).__name__}: {exc}"
+                    if not _is_retryable(exc):
+                        break
                     if attempt < config.generation.retries:
                         await asyncio.sleep(config.generation.retry_backoff_seconds * (2 ** attempt))
             else:
