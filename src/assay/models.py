@@ -6,7 +6,7 @@ import re
 import string
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class DatasetExample(BaseModel):
@@ -48,7 +48,8 @@ class JudgeSettings(BaseModel):
 
     provider: str
     model: str
-    rubric: str = Field(min_length=1)
+    rubric: str | None = Field(default=None, min_length=1)
+    rubric_file: str | None = None
     pass_threshold: float = Field(default=0.7, ge=0.0, le=1.0)
     temperature: float = Field(default=1.0, ge=0.0, le=1.0)
     max_tokens: int = Field(default=512, gt=0)
@@ -57,6 +58,12 @@ class JudgeSettings(BaseModel):
     retry_backoff_seconds: float = Field(default=0.5, ge=0.0)
     timeout_seconds: float = Field(default=60.0, gt=0.0)
     prices: PriceSettings = Field(default_factory=PriceSettings)
+
+    @model_validator(mode="after")
+    def require_rubric(self) -> "JudgeSettings":
+        if not self.rubric and not self.rubric_file:
+            raise ValueError("Set either judge.rubric or judge.rubric_file")
+        return self
 
 
 class ScorerSettings(BaseModel):

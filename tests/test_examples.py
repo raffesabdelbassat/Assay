@@ -31,3 +31,4 @@ def test_judge_example_config_validates() -> None:
     assert config.judge is not None
     assert config.judge.provider == "openai"
     assert config.judge.pass_threshold == 0.7
+    assert "Factual accuracy" in config.judge.rubric

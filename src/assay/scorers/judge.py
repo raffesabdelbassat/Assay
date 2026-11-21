@@ -59,7 +59,7 @@ class JudgeScorer(Scorer):
     async def score_example(self, question: str, output: str, expected: str | None) -> ScoreResult:
         del expected  # gold answers must not leak into the judge input
         payload = json.dumps(
-            {"question": question, "answer": output, "rubric": self.settings.rubric},
+            {"question": question, "answer": output, "rubric": self.settings.rubric or ""},
             ensure_ascii=False,
         )
         prompt = (

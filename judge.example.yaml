@@ -18,9 +18,7 @@ scorers:
 judge:
   provider: openai
   model: gpt-6.2-astra
-  rubric: |-
-    Score from 0 to 1. Reward factual accuracy, coverage of the important points,
-    and concise wording. Penalize unsupported claims and omissions.
+  rubric_file: rubrics/summary-quality.md
   pass_threshold: 0.7
   temperature: 1.0
   max_tokens: 256
